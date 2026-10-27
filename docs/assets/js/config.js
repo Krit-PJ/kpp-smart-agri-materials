@@ -5,6 +5,6 @@
  * เปิดโหมดทดลองชั่วคราวได้ด้วยการต่อท้ายลิงก์ ?demo=1
  */
 window.KPP_CONFIG = {
-  API_URL: '',
+  API_URL: 'https://script.google.com/macros/s/AKfycbxoo4VuAomjDPaDPXgEF6y0CFVxBfor-4OmIi3bQVik7FCgAx_7XghYmeav7BHDbpLcaw/exec',
   SHEET_URL: 'https://docs.google.com/spreadsheets/d/1MjD6vY_FDOiS_EiaMhWEDbcnWNwJfzmTACsTmoHVnis/edit'
 };
