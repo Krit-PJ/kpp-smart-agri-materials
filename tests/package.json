@@ -1,0 +1,13 @@
+{
+  "name": "kpp-smart-agri-materials-tests",
+  "private": true,
+  "scripts": { "test": "node server.test.js && node gas.test.js" },
+  "devDependencies": {
+    "@fontsource-variable/noto-sans-thai": "^5.0.0",
+    "@fontsource/ibm-plex-sans-thai": "^5.0.0",
+    "@fontsource/kanit": "^5.0.0",
+    "exceljs": "4.4.0",
+    "leaflet": "1.9.4",
+    "qrcode-generator": "1.4.4"
+  }
+}

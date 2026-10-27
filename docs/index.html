@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>KPP Smart Agri-Materials | ระบบรายงานการจัดการเศษวัสดุทางการเกษตร จังหวัดกำแพงเพชร</title>
+  <meta name="description" content="ระบบรายงานผลการจัดการเศษวัสดุทางการเกษตร แบบสะสมรายสัปดาห์ ระดับอำเภอและจังหวัด สำนักงานเกษตรจังหวัดกำแพงเพชร">
+  <meta name="theme-color" content="#1a7f37">
+  <link rel="icon" href="assets/img/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600;700&family=IBM+Plex+Sans+Thai:wght@400;500;600;700&family=Noto+Sans+Thai:wdth,wght@62.5..100,300..700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <link rel="stylesheet" href="assets/css/print.css">
+</head>
+<body>
+  <div id="boot" class="boot"><div class="boot-mark"><img src="assets/img/logo.svg" alt=""></div><div>กำลังโหลด KPP Smart Agri-Materials…</div></div>
+
+  <div id="shell" class="shell" hidden>
+    <aside class="side" id="side">
+      <a class="side-brand" href="#map">
+        <img src="assets/img/logo.svg" alt="">
+        <span><b>KPP Smart</b><small>Agri-Materials</small></span>
+      </a>
+      <nav class="side-nav" id="nav" aria-label="เมนูหลัก"></nav>
+      <div class="side-user" id="sideUser"></div>
+    </aside>
+    <div class="side-scrim" id="scrim"></div>
+    <div class="main">
+      <header class="topbar">
+        <button class="icon-btn menu-btn" id="menuBtn" aria-label="เปิดเมนู"><svg class="i" viewBox="0 0 24 24"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+        <div class="topbar-title"><h1 id="pageTitle"></h1><p id="pageSub"></p></div>
+        <div class="topbar-actions" id="topActions"></div>
+      </header>
+      <main id="view" class="view"></main>
+    </div>
+  </div>
+
+  <div id="demoBar" class="demo-bar" hidden></div>
+  <div id="modalRoot"></div>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <div id="printRoot" class="print-root"></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js" defer></script>
+  <script src="assets/js/config.js"></script>
+  <script src="assets/js/items.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/server.js"></script>
+  <script src="assets/js/store-local.js"></script>
+  <script src="assets/js/geo.js"></script>
+  <script src="assets/js/util.js"></script>
+  <script src="assets/js/api.js"></script>
+  <script src="assets/js/xlsx-export.js"></script>
+  <script src="assets/js/print.js"></script>
+  <script src="assets/js/page-map.js"></script>
+  <script src="assets/js/page-entry.js"></script>
+  <script src="assets/js/page-reports.js"></script>
+  <script src="assets/js/page-status.js"></script>
+  <script src="assets/js/page-admin.js"></script>
+  <script src="assets/js/app.js"></script>
+</body>
+</html>
