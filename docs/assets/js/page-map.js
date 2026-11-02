@@ -99,7 +99,9 @@
       }
 
       function panel() {
+        var showOthers = S.showOtherIndicators();
         var others = AG_ITEMS.filter(function (i) { return i.type === 'num' && !LAYERS.some(function (l) { return l.id === i.id; }); });
+        if (!showOthers && !LAYERS.some(function (l) { return l.id === state.layer; })) state.layer = 'R31';
         U.$('mPanel').innerHTML =
           '<h3>ครั้งที่รายงาน</h3><select id="mRound" style="margin-bottom:10px">' + S.roundOptions(state.round) + '</select>' +
           '<h3>ตัวชี้วัด · 2.2 พื้นที่เกษตร</h3>' +
@@ -107,8 +109,8 @@
             var it = itemOf(l.id);
             return '<button class="layer-btn' + (state.layer === l.id ? ' on' : '') + '" data-l="' + l.id + '"><span class="ic">' + U.icon(l.icon) + '</span><span>' + U.esc(l.short) + '<small>' + U.esc(it.unit || 'ตามที่ระบุ') + '</small></span></button>';
           }).join('') +
-          '<h3 style="margin-top:12px">ตัวชี้วัดอื่น</h3><select id="mOther"><option value="">— เลือกตัวชี้วัด —</option>' +
-          others.map(function (i) { return '<option value="' + i.id + '"' + (state.layer === i.id ? ' selected' : '') + '>' + U.esc(i.code + ' ' + i.label.slice(0, 60) + ' (' + i.unit + ')') + '</option>'; }).join('') + '</select>' +
+          (showOthers ? '<h3 style="margin-top:12px">ตัวชี้วัดอื่น</h3><select id="mOther"><option value="">— เลือกตัวชี้วัด —</option>' +
+            others.map(function (i) { return '<option value="' + i.id + '"' + (state.layer === i.id ? ' selected' : '') + '>' + U.esc(i.code + ' ' + i.label.slice(0, 60) + ' (' + i.unit + ')') + '</option>'; }).join('') + '</select>' : '') +
           '<h3 style="margin-top:14px">แผนที่พื้นหลัง</h3><div class="seg" id="mBase"><button data-b="osm">OSM</button><button data-b="light">สีอ่อน</button><button data-b="sat">ดาวเทียม</button></div>';
         U.$('mPanel').querySelectorAll('#mBase button').forEach(function (b) { b.classList.toggle('on', b.dataset.b === state.base); });
         U.$('mPanel').onclick = function (e) {
@@ -118,7 +120,7 @@
           if (bb) { map.removeLayer(bases[state.base]); state.base = bb.dataset.b; bases[state.base].addTo(map); bases[state.base].bringToBack(); panel(); draw(recs()); }
         };
         U.$('mRound').onchange = function (e) { state.round = Number(e.target.value); draw(recs()); };
-        U.$('mOther').onchange = function (e) { if (e.target.value) { state.layer = e.target.value; panel(); draw(recs()); } };
+        if (U.$('mOther')) U.$('mOther').onchange = function (e) { if (e.target.value) { state.layer = e.target.value; panel(); draw(recs()); } };
       }
 
       panel();

@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="th">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Data API | KPP Smart Agri-Materials</title>
+  <meta name="description" content="เอกสาร Data API v1 สำหรับดึงยอดสรุปการจัดการเศษวัสดุทางการเกษตร จังหวัดกำแพงเพชร ไปแสดงบน Dashboard ของเว็บไซต์อื่น">
+  <meta name="theme-color" content="#1a7f37">
+  <link rel="icon" href="assets/img/logo.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@400;500;600&family=IBM+Plex+Sans+Thai:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/app.css">
+  <style>
+    body { background: var(--bg); }
+    .doc { max-width: 1060px; margin: 0 auto; padding: 0 max(16px, env(safe-area-inset-right, 0px)) 80px max(16px, env(safe-area-inset-left, 0px)); }
+    .doc-top { background: var(--sidebar); color: var(--sidebar-text); }
+    .doc-top .doc { display: flex; align-items: center; gap: 12px; padding-top: 14px; padding-bottom: 14px; }
+    .doc-top img { width: 36px; height: 36px; }
+    .doc-top b { font-family: var(--display); font-size: 17px; display: block; line-height: 1.2; }
+    .doc-top small { color: var(--sidebar-muted); }
+    .doc-top a.back { margin-left: auto; color: #7ee2a0; text-decoration: none; font-family: var(--display); font-size: 14px; }
+    .hero { padding: 34px 0 10px; }
+    .hero h1 { font-size: 30px; }
+    .hero p { color: var(--muted); max-width: 70ch; margin: 8px 0 0; }
+    h2.sec { font-size: 20px; margin: 34px 0 12px; }
+    code, pre, .mono { font-family: 'IBM Plex Mono', ui-monospace, monospace; font-size: 13px; }
+    code { background: #eef1f4; padding: 1px 6px; border-radius: 5px; }
+    pre { background: #0d1117; color: #e6edf3; padding: 14px 16px; border-radius: var(--r-lg); overflow-x: auto; line-height: 1.55; margin: 0; }
+    pre .c { color: #8b949e; }
+    .card-b > *, .try > *, .hero { min-width: 0; } pre { max-width: 100%; white-space: pre; }
+    .ep { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px 16px; padding: 14px 18px; border-top: 1px solid var(--border-light); }
+    .ep:first-of-type { border-top: 0; }
+    .ep .name { font: 600 14px 'IBM Plex Mono', monospace; color: var(--primary-dark); }
+    .ep p { margin: 0; }
+    .params td:first-child { font-family: 'IBM Plex Mono', monospace; white-space: nowrap; }
+    .try { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+    .try .wide { grid-column: span 4; }
+    #tryOut { max-height: 440px; }
+    .pill { display: inline-block; font: 500 12px var(--display); padding: 2px 9px; border-radius: 99px; background: var(--primary-bg); color: var(--primary-dark); }
+    @media (max-width: 760px) { .ep { grid-template-columns: 1fr; } .try { grid-template-columns: 1fr 1fr; } .try .wide { grid-column: span 2; } .hero h1 { font-size: 24px; } }
+  </style>
+</head>
+<body>
+  <div class="doc-top"><div class="doc"><img src="assets/img/logo.svg" alt=""><div><b>KPP Smart Agri-Materials</b><small>Data API v1 สำหรับนักพัฒนา</small></div><a class="back" href="./">กลับสู่ระบบรายงาน →</a></div></div>
+  <main class="doc">
+    <section class="hero">
+      <span class="pill">GET · JSON · CSV · JSONP</span>
+      <h1 style="margin-top:10px">ดึงยอดสรุปไปแสดงบน Dashboard ของเว็บไซต์อื่น</h1>
+      <p>API อ่านอย่างเดียว ให้ยอดของรายงานที่อำเภอ <b>ส่งแล้ว</b> หรือจังหวัด <b>ตรวจรับแล้ว</b> เท่านั้น (ฉบับร่างและที่ส่งกลับแก้ไขไม่นับ) ไม่มีชื่อหรือเบอร์โทรของผู้รายงาน ผลลัพธ์ถูกเก็บ cache 5 นาที และล้างทันทีเมื่อมีการส่งหรือตรวจรับรายงาน</p>
+    </section>
+
+    <div class="card"><div class="card-h"><h2>ที่อยู่ API</h2></div><div class="card-b" style="display:grid;gap:10px">
+      <pre id="baseUrl">กำลังโหลด…</pre>
+      <div class="small muted">ทุกคำขอเป็น <code>GET</code> พร้อมพารามิเตอร์ <code>api=v1</code> และ <code>endpoint</code> · ต้องแนบ <code>key</code> เมื่อผู้ดูแลระบบเปิด "ต้องใช้ API Key" (ขอ Key ได้จาก Super Admin ที่เมนู ตั้งค่ารายงานและระบบ → Data API)</div>
+      <div class="notice warn" style="margin:0"><svg class="i" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4M12 17h.01"/></svg><div>Key ที่ใส่ในหน้าเว็บฝั่งผู้ใช้ (JavaScript) ทุกคนเปิดดูได้ ใช้ Key เพื่อ <b>แยกและยกเลิกสิทธิ์รายเว็บไซต์</b> ไม่ใช่เพื่อปกป้องข้อมูลลับ · จำกัด 120 ครั้ง/นาที/Key · Google Apps Script ตอบประมาณ 1–3 วินาที ควรโหลดข้อมูลเป็นระยะ (เช่น ทุก 5–15 นาที) ไม่ใช่ทุกวินาที</div></div>
+    </div></div>
+
+    <h2 class="sec">Endpoint</h2>
+    <div class="card">
+      <div class="ep"><div class="name">meta</div><div><p>ข้อมูลอ้างอิง: ชื่อหน่วยงาน ปี ครั้งที่ปัจจุบัน รายการรอบรายงาน (วันเริ่ม/สิ้นสุด/กำหนดส่ง) 11 อำเภอ (รหัส D01–D11 และรหัสอำเภอ 6201–6211 สำหรับจับคู่แผนที่) และตัวชี้วัดทุกข้อ</p></div></div>
+      <div class="ep"><div class="name">summary</div><div><p>ยอดรวมจังหวัด ณ ครั้งที่เลือก: ยอดครั้งนี้ (<code>week</code>) ยอดสะสม (<code>cumulative</code>) แยกรายอำเภอ (<code>by_district</code>) จำนวนอำเภอที่ส่งแล้ว สถานะการส่ง และกิจกรรมข้อ 4</p></div></div>
+      <div class="ep"><div class="name">districts</div><div><p>ยอดรายอำเภอ (ทั้ง 11 อำเภอ หรือระบุ <code>district</code>) พร้อมสถานะการส่ง (<code>none</code> / <code>draft</code> / <code>submitted</code> / <code>accepted</code> / <code>returned</code>) และ <code>late</code> (ส่งหลังกำหนด)</p></div></div>
+      <div class="ep"><div class="name">timeseries</div><div><p>อนุกรมเวลาตั้งแต่ยอดยกมา (ครั้งที่ 0) ถึงครั้งที่เลือก ระดับจังหวัด หรือระบุ <code>district</code> เหมาะกับกราฟเส้นแนวโน้ม</p></div></div>
+      <div class="ep"><div class="name">status</div><div><p>ตารางสถานะการส่งรายงาน อำเภอ × ครั้ง (ไม่มีชื่อผู้ส่ง)</p></div></div>
+    </div>
+
+    <h2 class="sec">พารามิเตอร์</h2>
+    <div class="card"><div class="tbl-wrap"><table class="t params"><thead><tr><th>ชื่อ</th><th>ค่า</th><th>คำอธิบาย</th></tr></thead><tbody>
+      <tr><td>api</td><td><code>v1</code></td><td>เวอร์ชันของ API (จำเป็น)</td></tr>
+      <tr><td>endpoint</td><td><code>meta</code> <code>summary</code> <code>districts</code> <code>timeseries</code> <code>status</code></td><td>ค่าเริ่มต้น <code>summary</code></td></tr>
+      <tr><td>key</td><td><code>kpp_…</code></td><td>API Key (จำเป็นเมื่อเปิด "ต้องใช้ API Key")</td></tr>
+      <tr><td>round</td><td>ตัวเลข หรือ <code>current</code></td><td>ครั้งที่รายงาน ค่าเริ่มต้น = ครั้งปัจจุบัน · <code>0</code> = ยอดยกมา</td></tr>
+      <tr><td>items</td><td><code>agri</code> <code>all</code> หรือ <code>R29,R31</code></td><td>ตัวชี้วัด ค่าเริ่มต้น <code>agri</code> = ข้อ 2.2 พื้นที่เกษตร (R29 ส่งเสริม/อบรม · R30 แปรรูป · R31 ไถกลบ · R32 อื่น ๆ) ดูรหัสทั้งหมดได้จาก <code>meta</code></td></tr>
+      <tr><td>district</td><td><code>D01</code>–<code>D11</code></td><td>เฉพาะ <code>districts</code> และ <code>timeseries</code></td></tr>
+      <tr><td>format</td><td><code>json</code> <code>csv</code></td><td>CSV (UTF-8) ใช้กับ Excel / Google Sheets ได้ทันที</td></tr>
+      <tr><td>callback</td><td>ชื่อฟังก์ชัน</td><td>JSONP สำหรับเว็บที่เรียกข้ามโดเมนแบบเก่า</td></tr>
+    </tbody></table></div></div>
+
+    <h2 class="sec">ตัวอย่างการใช้งาน</h2>
+    <div class="card"><div class="card-b" style="display:grid;gap:14px">
+      <div><b style="font-family:var(--display)">JavaScript (fetch)</b><pre id="exJs"></pre></div>
+      <div><b style="font-family:var(--display)">Google Sheets — ดึงเข้าตารางอัตโนมัติ</b><pre id="exSheet"></pre></div>
+      <div><b style="font-family:var(--display)">Python</b><pre id="exPy"></pre></div>
+      <div><b style="font-family:var(--display)">โครงสร้างผลลัพธ์ (summary)</b><pre><span class="c">// ทุกคำตอบ JSON อยู่ในรูปแบบเดียวกัน</span>
+{
+  "ok": true, "api_version": "1", "endpoint": "summary",
+  "generated_at": "2026-11-02 23:50:00", "timezone": "Asia/Bangkok",
+  "data": {
+    "round": { "round": 2, "label": "ครั้งที่ 2", "start": "2026-10-29", "end": "2026-11-04", "due": "2026-11-06" },
+    "districts_total": 11,
+    "reported": { "count": 9, "districts": ["D01", "D02", "…"] },
+    "status_counts": { "accepted": 5, "submitted": 4, "draft": 1, "returned": 0, "none": 1 },
+    "items": [
+      { "id": "R31", "code": "2.2", "label": "ไถกลบตอซัง/การใช้สารย่อยสลาย", "unit": "ไร่",
+        "week": 2593, "cumulative": 26624, "districts_reporting_yes": 9,
+        "by_district": { "D01": { "week": 150, "cumulative": 3460 }, "…": {} } }
+    ],
+    "other_activities": [ { "title": "…", "unit": "แห่ง", "week": 0, "cumulative": 1, "districts": ["ขาณุวรลักษบุรี"] } ]
+  }
+}
+<span class="c">// เมื่อผิดพลาด: { "ok": false, "code": "invalid_key", "error": "…" }
+// code: api_disabled · key_required · invalid_key · rate_limited · bad_endpoint · bad_round · bad_items · bad_district · bad_version</span></pre></div>
+    </div></div>
+
+    <h2 class="sec">ทดลองเรียก API</h2>
+    <div class="card"><div class="card-b">
+      <form id="tryForm" class="try">
+        <label class="fld"><span>endpoint</span><select id="tEp"><option>summary</option><option>meta</option><option>districts</option><option>timeseries</option><option>status</option></select></label>
+        <label class="fld"><span>round</span><input id="tRound" placeholder="current"></label>
+        <label class="fld"><span>items</span><input id="tItems" placeholder="agri"></label>
+        <label class="fld"><span>format</span><select id="tFmt"><option>json</option><option>csv</option></select></label>
+        <label class="fld wide"><span>key</span><input id="tKey" placeholder="kpp_… (เว้นว่างได้ถ้าเปิดแบบไม่ต้องใช้ Key)" autocomplete="off"></label>
+        <div class="wide row" style="gap:8px"><button class="btn primary" type="submit">เรียก API</button><span class="small muted" id="tInfo"></span></div>
+        <div class="wide"><div class="small muted" id="tUrl" style="word-break:break-all;margin-bottom:6px"></div><pre id="tryOut">ผลลัพธ์จะแสดงที่นี่</pre></div>
+      </form>
+    </div></div>
+  </main>
+  <script src="assets/js/config.js"></script>
+  <script>
+    (function () {
+      var base = String((window.KPP_CONFIG || {}).API_URL || '').trim();
+      var shown = base || '<URL ของ Apps Script Web App>/exec';
+      function $(id) { return document.getElementById(id); }
+      function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); }
+      $('baseUrl').textContent = shown + '?api=v1&endpoint=summary&key=YOUR_KEY';
+      $('exJs').innerHTML = esc("const URL = '" + shown + "';\n" +
+        "const res = await fetch(URL + '?api=v1&endpoint=summary&items=agri&key=YOUR_KEY');\n" +
+        "const json = await res.json();\n" +
+        "if (!json.ok) throw new Error(json.error);\n" +
+        "const r31 = json.data.items.find(i => i.id === 'R31');\n" +
+        "console.log('ไถกลบสะสม', r31.cumulative, r31.unit);");
+      $('exSheet').innerHTML = esc('=IMPORTDATA("' + shown + '?api=v1&endpoint=districts&format=csv&items=agri&key=YOUR_KEY")');
+      $('exPy').innerHTML = esc("import requests\nr = requests.get('" + shown + "', params={\n    'api': 'v1', 'endpoint': 'timeseries', 'items': 'R29,R31', 'key': 'YOUR_KEY'})\ndata = r.json()['data']\nfor row in data['series']:\n    print(row['round'], row['values']['R31']['cumulative'])");
+      $('tryForm').onsubmit = function (e) {
+        e.preventDefault();
+        if (!base) { $('tryOut').textContent = 'ยังไม่ได้ตั้งค่า API_URL ในระบบ (โหมดทดลอง)'; return; }
+        var q = { api: 'v1', endpoint: $('tEp').value, format: $('tFmt').value };
+        if ($('tRound').value.trim()) q.round = $('tRound').value.trim();
+        if ($('tItems').value.trim()) q.items = $('tItems').value.trim();
+        if ($('tKey').value.trim()) q.key = $('tKey').value.trim();
+        var url = base + '?' + Object.keys(q).map(function (k) { return k + '=' + encodeURIComponent(q[k]); }).join('&');
+        $('tUrl').textContent = url.replace(/key=[^&]+/, 'key=••••');
+        $('tryOut').textContent = 'กำลังเรียก…';
+        var t0 = Date.now();
+        fetch(url, { redirect: 'follow' }).then(function (r) { return r.text(); }).then(function (txt) {
+          $('tInfo').textContent = 'ใช้เวลา ' + ((Date.now() - t0) / 1000).toFixed(1) + ' วินาที';
+          try { $('tryOut').textContent = JSON.stringify(JSON.parse(txt), null, 2); } catch (err) { $('tryOut').textContent = txt; }
+        }).catch(function (err) { $('tryOut').textContent = 'เรียกไม่สำเร็จ: ' + err.message; });
+      };
+    })();
+  </script>
+</body>
+</html>

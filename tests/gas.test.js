@@ -28,7 +28,7 @@ const ctx = { console, Date, Math, JSON, String, Number, Object, Array, Error, i
   PropertiesService: { getScriptProperties: () => ({ getProperty: k => props[k] || null, setProperty: (k, v) => props[k] = v, deleteProperty: k => delete props[k] }) },
   CacheService: { getScriptCache: () => ({ get: k => cache[k] || null, put: (k, v) => cache[k] = v }) },
   LockService: { getScriptLock: () => ({ waitLock() { }, releaseLock() { } }) },
-  ContentService: { MimeType: { JSON: 1 }, createTextOutput: t => ({ t, setMimeType() { return this; } }) },
+  ContentService: { MimeType: { JSON: 'json', CSV: 'csv', JAVASCRIPT: 'js' }, createTextOutput: t => ({ t, setMimeType(m) { this.m = m; return this; } }) },
   Logger: { log() { } } };
 vm.createContext(ctx);
 const dir = path.join(__dirname, '..', 'apps-script');
@@ -54,4 +54,18 @@ const del = post({ action: 'admin.users.delete', token: su.data.token, id: u.dat
 assert.strictEqual(ss.sheets.Users.getLastRow(), 3);
 const logs = post({ action: 'admin.logs', token: su.data.token }); assert(logs.ok && logs.data.length >= 6, JSON.stringify(logs).slice(0, 200));
 ctx.writeProvinceSummary(1); assert(ss.sheets['สรุปจังหวัด'].getLastRow() > 50);
+// Data API ผ่าน GET (ชีต ApiKeys ถูกสร้างอัตโนมัติ)
+delete ss.sheets.ApiKeys;
+const get = q => ctx.doGet({ parameter: q });
+let g = JSON.parse(get({ api: 'v1', endpoint: 'summary' }).t);
+assert.strictEqual(g.ok, false); assert.strictEqual(g.code, 'key_required');
+const k = post({ action: 'admin.apikeys.create', token: su.data.token, label: 'ทดสอบ' }); assert(k.ok, k.error);
+assert(ss.sheets.ApiKeys, 'สร้างชีต ApiKeys อัตโนมัติ');
+g = JSON.parse(get({ api: 'v1', endpoint: 'summary', key: k.data.key, round: '1' }).t);
+assert(g.ok, g.error); assert.strictEqual(g.data.items.find(i => i.id === 'R31').cumulative, 130);
+const csv = get({ api: 'v1', endpoint: 'districts', key: k.data.key, round: '1', format: 'csv' });
+assert.strictEqual(csv.m, 'csv'); assert(csv.t.includes('D03,คลองลาน,submitted,R31,ไร่,130,130'));
+const jp = get({ api: 'v1', endpoint: 'meta', key: k.data.key, callback: 'show' });
+assert.strictEqual(jp.m, 'js'); assert(jp.t.startsWith('show({"ok":true'));
+assert.strictEqual(JSON.parse(get({ api: 'v2', endpoint: 'meta', key: k.data.key }).t).code, 'bad_version');
 console.log('✓ Apps Script tests passed');

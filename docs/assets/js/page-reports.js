@@ -106,7 +106,8 @@
       '<div class="bar-mini"><i style="width:' + Math.round(p.reported.length / nd * 100) + '%"></i></div><div class="small muted" style="margin-top:4px">ตรวจรับ ' + cnt.accepted + ' · รอตรวจ ' + cnt.submitted + ' · ร่าง ' + cnt.draft + ' · ส่งกลับ ' + cnt.returned + '</div></div></div>' +
       AGRI.slice(0, 3).map(function (a) { var x = p.items[a[0]]; return kpi(itemOf(a[0]), x.cum, x.week, x.unit, a[1]); }).join('') + '</div>'];
 
-    var nums = AG_ITEMS.filter(function (i) { return i.type === 'num' || i.type === 'other'; });
+    var nums = AG_ITEMS.filter(function (i) { return (i.type === 'num' || i.type === 'other') && (S.showOtherIndicators() || i.code === '2.2'); });
+    if (!nums.some(function (i) { return i.id === P.item; })) P.item = 'R31';
     h.push('<div class="card"><div class="card-h"><h2>เปรียบเทียบยอดสะสมรายอำเภอ</h2><select id="pItem" style="width:auto;max-width:100%">' +
       nums.map(function (i) { return '<option value="' + i.id + '"' + (P.item === i.id ? ' selected' : '') + '>' + U.esc(i.code + ' ' + (i.label.length > 70 ? i.label.slice(0, 68) + '…' : i.label)) + '</option>'; }).join('') +
       '</select></div><div class="legend" style="padding:10px 18px 4px"><span><i style="background:var(--primary-light)"></i>สะสมก่อนหน้า</span><span><i style="background:var(--accent)"></i>เพิ่มในครั้งนี้</span><span id="pUnit"></span></div><div class="hbars" id="pBars"></div></div>');

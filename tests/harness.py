@@ -4,7 +4,7 @@ import os, re, base64, subprocess, time, socket
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 NM = os.path.join(ROOT, 'tests', 'node_modules')
 PORT = 8811
-BASE = f'http://localhost:{PORT}/docs/'
+BASE = f'http://localhost:{PORT}/docs/?demo=1'
 GRAY = base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mN89+7dfwAJXAPuXtVQ9gAAAABJRU5ErkJggg==')
 
 

@@ -337,7 +337,7 @@ if (typeof module !== 'undefined' && module.exports) module.exports = AGCore;
  *                super    = ผู้ดูแลระบบสูงสุด (Super Admin)
  */
 var AGServer = (function () {
-  var T = { SETTINGS: 'Settings', DISTRICTS: 'Districts', USERS: 'Users', ROUNDS: 'Rounds', DATA: 'Data', LOG: 'AccessLog' };
+  var T = { SETTINGS: 'Settings', DISTRICTS: 'Districts', USERS: 'Users', ROUNDS: 'Rounds', DATA: 'Data', LOG: 'AccessLog', APIKEYS: 'ApiKeys' };
 
   var COLS = {
     Settings: ['key', 'value', 'note'],
@@ -346,6 +346,7 @@ var AGServer = (function () {
       'token_ver', 'created_at', 'created_by', 'last_login', 'login_count', 'last_seen'],
     Rounds: ['round', 'label', 'start', 'end', 'due', 'open'],
     AccessLog: ['time', 'user_id', 'account', 'name', 'role', 'district', 'action', 'detail', 'ua'],
+    ApiKeys: ['id', 'label', 'prefix', 'key_hash', 'status', 'created_at', 'created_by', 'last_used'],
     DataMeta: ['round', 'district', 'district_name', 'status', 'reporter', 'position', 'phone', 'sec4', 'sec5',
       'updated_at', 'updated_by', 'submitted_at', 'submitted_by', 'reviewed_at', 'reviewed_by', 'review_note']
   };
@@ -366,12 +367,16 @@ var AGServer = (function () {
     ['REGISTRATION_OPEN', 'TRUE', 'เปิดให้เจ้าหน้าที่อำเภอลงทะเบียนเอง'],
     ['PUBLIC_DASHBOARD', 'TRUE', 'แสดงแผนที่สรุปผล (เฉพาะรายงานที่ส่งแล้ว) โดยไม่ต้องเข้าสู่ระบบ'],
     ['STATUS_VISIBLE_TO_DISTRICT', 'FALSE', 'ให้เจ้าหน้าที่อำเภอดูสถานะการส่งรายงานของทุกอำเภอได้'],
-    ['SESSION_HOURS', '12', 'อายุการเข้าสู่ระบบ (ชั่วโมง)']
+    ['SESSION_HOURS', '12', 'อายุการเข้าสู่ระบบ (ชั่วโมง)'],
+    ['SHOW_OTHER_INDICATORS', 'FALSE', 'แสดงส่วน "ตัวชี้วัดอื่น" (นอกเหนือข้อ 2.2 พื้นที่เกษตร) ในแผนที่และกราฟเปรียบเทียบ'],
+    ['API_ENABLED', 'TRUE', 'เปิด Data API ให้เว็บไซต์ Dashboard ภายนอกดึงข้อมูลสรุป'],
+    ['API_REQUIRE_KEY', 'TRUE', 'Data API ต้องใช้ API Key (Super Admin สร้าง/ยกเลิกได้)']
   ];
   var PUBLIC_KEYS = ['SITE_NAME', 'PROVINCE', 'OFFICE', 'TITLE', 'SEASON', 'DOC_REF_1', 'DOC_REF_2', 'QR_NOTE', 'QR_LINK', 'QR_IMAGE',
-    'PROV_REPORTER_NAME', 'PROV_REPORTER_TITLE', 'REGISTRATION_OPEN', 'PUBLIC_DASHBOARD', 'STATUS_VISIBLE_TO_DISTRICT'];
+    'PROV_REPORTER_NAME', 'PROV_REPORTER_TITLE', 'REGISTRATION_OPEN', 'PUBLIC_DASHBOARD', 'STATUS_VISIBLE_TO_DISTRICT',
+    'SHOW_OTHER_INDICATORS', 'API_ENABLED', 'API_REQUIRE_KEY'];
   var MINI_KEYS = ['OFFICE', 'TITLE', 'SEASON', 'DOC_REF_1', 'DOC_REF_2', 'QR_NOTE', 'QR_LINK', 'QR_IMAGE',
-    'PROV_REPORTER_NAME', 'PROV_REPORTER_TITLE', 'STATUS_VISIBLE_TO_DISTRICT'];
+    'PROV_REPORTER_NAME', 'PROV_REPORTER_TITLE', 'STATUS_VISIBLE_TO_DISTRICT', 'SHOW_OTHER_INDICATORS'];
   var SUPER_KEYS = PUBLIC_KEYS.concat(['SESSION_HOURS']);
 
   var DEFAULT_DISTRICTS = ['เมืองกำแพงเพชร', 'ไทรงาม', 'คลองลาน', 'ขาณุวรลักษบุรี', 'คลองขลุง', 'พรานกระต่าย',
@@ -866,6 +871,199 @@ var AGServer = (function () {
       return true;
     };
 
+
+    /* ═════════ Data API v1 (อ่านอย่างเดียว สำหรับ Dashboard ภายนอก) ═════════
+     * GET <WEB_APP_URL>?api=v1&endpoint=summary&key=...&round=3&items=agri&format=json|csv&callback=fn
+     * ข้อมูล = ยอดรวมของรายงานที่ "ส่งแล้ว/ตรวจรับแล้ว" เท่านั้น ไม่มีข้อมูลส่วนบุคคล
+     */
+    var API_VERSION = '1';
+    var AGRI_IDS = ['R29', 'R30', 'R31', 'R32'];
+    var API_ENDPOINTS = ['meta', 'summary', 'districts', 'timeseries', 'status'];
+    function apiFail(code, msg) { var e = new Error(msg); e.code = code; throw e; }
+    function bump() { store.cachePut('data_ver', store.uuid(), 21600); }
+    function currentRound(rs) {
+      var t = store.today(), cur = 0;
+      rs.forEach(function (r) { if (r.round > 0 && r.start && r.start <= t) cur = Math.max(cur, r.round); });
+      if (!cur) rs.forEach(function (r) { if (r.open) cur = Math.max(cur, r.round); });
+      return cur;
+    }
+    function apiKeyCheck(p, s) {
+      if (!truthy(s.API_REQUIRE_KEY)) return { id: '', label: 'public' };
+      var key = str(p.key).trim();
+      if (!key) apiFail('key_required', 'ต้องระบุ API Key (พารามิเตอร์ key)');
+      var h = store.sha256(key);
+      var k = store.rows(T.APIKEYS).filter(function (x) { return str(x.key_hash) === h && str(x.status) !== 'revoked'; })[0];
+      if (!k) apiFail('invalid_key', 'API Key ไม่ถูกต้องหรือถูกยกเลิกแล้ว');
+      if (!store.cacheGet('keyseen:' + k.id)) {
+        store.cachePut('keyseen:' + k.id, '1', 3600);
+        store.update(T.APIKEYS, function (x) { return str(x.id) === str(k.id); }, { last_used: store.now() });
+      }
+      return k;
+    }
+    function rateLimit(id) {
+      var slot = 'rl:' + (id || 'public') + ':' + Math.floor(Date.now() / 60000);
+      var n = Number(store.cacheGet(slot) || 0) + 1;
+      store.cachePut(slot, String(n), 120);
+      if (n > 120) apiFail('rate_limited', 'เรียกใช้เกิน 120 ครั้ง/นาที กรุณาลองใหม่ภายหลัง');
+    }
+    function pickItems(spec) {
+      var all = items.filter(function (it) { return it.type !== 'header'; });
+      spec = str(spec || 'agri').trim();
+      if (spec === 'all') return all;
+      if (spec === 'agri') return all.filter(function (it) { return AGRI_IDS.indexOf(it.id) >= 0; });
+      var ids = spec.split(',').map(function (x) { return x.trim().toUpperCase(); });
+      var out = all.filter(function (it) { return ids.indexOf(it.id) >= 0; });
+      if (!out.length) apiFail('bad_items', 'ไม่พบตัวชี้วัด: ' + spec + ' (ใช้ agri, all หรือรหัส เช่น R29,R31)');
+      return out;
+    }
+    function itemInfo(it) {
+      return { id: it.id, code: it.code, section: it.section, label: it.label, unit: it.unit, type: it.type, aggregation: it.agg, agri: AGRI_IDS.indexOf(it.id) >= 0 };
+    }
+    function roundInfo(r) { return r ? { round: r.round, label: r.label, start: r.start, end: r.end, due: r.due } : null; }
+    function nv(x) { return x === undefined ? null : x; }
+
+    var API = {
+      meta: function (ctx) {
+        var s = ctx.s;
+        return {
+          site: s.SITE_NAME, province: s.PROVINCE, office: s.OFFICE, title: s.TITLE, season: s.SEASON,
+          current_round: ctx.cur, rounds: ctx.rounds.map(roundInfo), districts: ctx.districts,
+          items: items.filter(function (it) { return it.type !== 'header'; }).map(itemInfo),
+          endpoints: API_ENDPOINTS, counted_status: ['submitted', 'accepted']
+        };
+      },
+      summary: function (ctx) {
+        var p = AGCore.computeProvince(items, ctx.records, ctx.districts, ctx.round);
+        var st = { accepted: 0, submitted: 0, draft: 0, returned: 0, none: 0 };
+        ctx.districts.forEach(function (d) { var r = AGCore.recordOf(ctx.allRecords, d.code, ctx.round); st[r ? r.status : 'none']++; });
+        return {
+          round: roundInfo(ctx.rd), districts_total: ctx.districts.length,
+          reported: { count: p.reported.length, districts: p.reported }, status_counts: st,
+          items: ctx.items.map(function (it) {
+            var x = p.items[it.id];
+            return { id: it.id, code: it.code, label: it.label, unit: x.unit || it.unit, week: nv(x.week), cumulative: nv(x.cum),
+              districts_reporting_yes: x.yes, by_district: ctx.districts.reduce(function (o, d) { var b = x.byDistrict[d.code]; o[d.code] = { week: nv(b.week), cumulative: nv(b.cum) }; return o; }, {}) };
+          }),
+          other_activities: p.sec4.map(function (a) { return { title: a.t, unit: a.u, week: nv(a.week.v), cumulative: nv(a.cum), districts: a.districts }; })
+        };
+      },
+      districts: function (ctx) {
+        var list = ctx.p.district ? ctx.districts.filter(function (d) { return d.code === str(ctx.p.district).toUpperCase(); }) : ctx.districts;
+        if (!list.length) apiFail('bad_district', 'ไม่พบอำเภอ: ' + ctx.p.district);
+        var m = AGCore.statusMatrix(ctx.allRecords, ctx.rounds);
+        return {
+          round: roundInfo(ctx.rd),
+          districts: list.map(function (d) {
+            var c = AGCore.computeDistrict(items, ctx.records, d.code, ctx.round), cell = m[d.code] && m[d.code][ctx.round];
+            return {
+              code: d.code, name: d.name, amp_code: d.amp_code, status: cell ? cell.status : 'none', counted: c.counted, late: !!(cell && cell.late),
+              items: ctx.items.reduce(function (o, it) { var x = c.items[it.id]; o[it.id] = { week: nv(x.week.v), cumulative: nv(x.cum), unit: x.unit || it.unit }; return o; }, {})
+            };
+          })
+        };
+      },
+      timeseries: function (ctx) {
+        var dcode = ctx.p.district ? str(ctx.p.district).toUpperCase() : '';
+        if (dcode && !ctx.districts.some(function (d) { return d.code === dcode; })) apiFail('bad_district', 'ไม่พบอำเภอ: ' + ctx.p.district);
+        var series = ctx.rounds.filter(function (r) { return r.round <= ctx.round; }).map(function (r) {
+          var vals = {}, reported;
+          if (dcode) {
+            var c = AGCore.computeDistrict(items, ctx.records, dcode, r.round);
+            ctx.items.forEach(function (it) { var x = c.items[it.id]; vals[it.id] = { week: nv(x.week.v), cumulative: nv(x.cum) }; });
+            reported = c.counted ? 1 : 0;
+          } else {
+            var p = AGCore.computeProvince(items, ctx.records, ctx.districts, r.round);
+            ctx.items.forEach(function (it) { var x = p.items[it.id]; vals[it.id] = { week: nv(x.week), cumulative: nv(x.cum) }; });
+            reported = p.reported.length;
+          }
+          return { round: r.round, label: r.label, start: r.start, end: r.end, reported: reported, values: vals };
+        });
+        return { scope: dcode || 'province', items: ctx.items.map(itemInfo), series: series };
+      },
+      status: function (ctx) {
+        var m = AGCore.statusMatrix(ctx.allRecords, ctx.rounds), rs = ctx.rounds.filter(function (r) { return r.round <= ctx.round; });
+        return {
+          rounds: rs.map(roundInfo),
+          districts: ctx.districts.map(function (d) {
+            return { code: d.code, name: d.name, rounds: rs.reduce(function (o, r) { var c = m[d.code] && m[d.code][r.round]; o[r.round] = c ? { status: c.status, late: c.late, submitted_at: c.at } : { status: 'none', late: false, submitted_at: '' }; return o; }, {}) };
+          })
+        };
+      }
+    };
+
+    /** แปลงผลลัพธ์เป็นตาราง CSV */
+    function toCsv(endpoint, data) {
+      var rows = [];
+      if (endpoint === 'summary') {
+        rows.push(['round', 'item_id', 'code', 'label', 'unit', 'week', 'cumulative', 'districts_reporting_yes']);
+        data.items.forEach(function (x) { rows.push([data.round.round, x.id, x.code, x.label, x.unit, x.week, x.cumulative, x.districts_reporting_yes]); });
+      } else if (endpoint === 'districts') {
+        rows.push(['round', 'district_code', 'district_name', 'status', 'item_id', 'unit', 'week', 'cumulative']);
+        data.districts.forEach(function (d) { Object.keys(d.items).forEach(function (id) { var x = d.items[id]; rows.push([data.round.round, d.code, d.name, d.status, id, x.unit, x.week, x.cumulative]); }); });
+      } else if (endpoint === 'timeseries') {
+        rows.push(['scope', 'round', 'start', 'end', 'reported', 'item_id', 'week', 'cumulative']);
+        data.series.forEach(function (r) { Object.keys(r.values).forEach(function (id) { var x = r.values[id]; rows.push([data.scope, r.round, r.start, r.end, r.reported, id, x.week, x.cumulative]); }); });
+      } else if (endpoint === 'status') {
+        rows.push(['district_code', 'district_name', 'round', 'status', 'late', 'submitted_at']);
+        data.districts.forEach(function (d) { Object.keys(d.rounds).forEach(function (r) { var x = d.rounds[r]; rows.push([d.code, d.name, r, x.status, x.late, x.submitted_at]); }); });
+      } else {
+        rows.push(['item_id', 'code', 'section', 'label', 'unit', 'type', 'aggregation', 'agri']);
+        data.items.forEach(function (x) { rows.push([x.id, x.code, x.section, x.label, x.unit, x.type, x.aggregation, x.agri]); });
+      }
+      return '﻿' + rows.map(function (r) { return r.map(function (c) { c = c === null || c === undefined ? '' : String(c); return /[",\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(','); }).join('\r\n');
+    }
+
+    /** เรียก Data API: คืน { body: object|string, csv: bool } */
+    function api(p) {
+      p = p || {};
+      var s = settings();
+      if (!truthy(s.API_ENABLED)) apiFail('api_disabled', 'Data API ปิดใช้งานอยู่');
+      var endpoint = str(p.endpoint || 'summary').toLowerCase();
+      if (API_ENDPOINTS.indexOf(endpoint) < 0) apiFail('bad_endpoint', 'endpoint ต้องเป็นหนึ่งใน: ' + API_ENDPOINTS.join(', '));
+      var key = apiKeyCheck(p, s);
+      rateLimit(key.id);
+      var format = str(p.format || 'json').toLowerCase() === 'csv' ? 'csv' : 'json';
+      var ver = store.cacheGet('data_ver') || '0';
+      var ck = 'api:' + store.sha256([ver, endpoint, p.round, p.items, p.district, format].join('|')).slice(0, 40);
+      var hit = store.cacheGet(ck);
+      if (hit) return { body: format === 'csv' ? hit : JSON.parse(hit), csv: format === 'csv', cached: true };
+      var rs = rounds(), cur = currentRound(rs);
+      var round = p.round === undefined || p.round === '' || p.round === 'current' ? cur : Number(p.round);
+      var rd = rs.filter(function (r) { return r.round === round; })[0];
+      if (!rd) apiFail('bad_round', 'ไม่พบครั้งที่ ' + p.round);
+      var all = records();
+      var ctx = { p: p, s: s, rounds: rs, cur: cur, round: round, rd: rd, districts: districts(), allRecords: all,
+        records: all.filter(AGCore.isCounted), items: endpoint === 'meta' || endpoint === 'status' ? [] : pickItems(p.items) };
+      var data = API[endpoint](ctx);
+      var body = format === 'csv' ? toCsv(endpoint, data) : { ok: true, api_version: API_VERSION, endpoint: endpoint, generated_at: store.now(), timezone: 'Asia/Bangkok', data: data };
+      var txt = format === 'csv' ? body : JSON.stringify(body);
+      if (txt.length < 90000) store.cachePut(ck, txt, 300);
+      return { body: body, csv: format === 'csv', cached: false };
+    }
+
+    /* ── จัดการ API Key (Super Admin) ── */
+    function publicKey(k) { return { id: str(k.id), label: str(k.label), prefix: str(k.prefix), status: str(k.status) || 'active', created_at: str(k.created_at), created_by: str(k.created_by), last_used: str(k.last_used) }; }
+    A['admin.apikeys.list'] = function (p, u) { need(u, ['super']); return store.rows(T.APIKEYS).map(publicKey).reverse(); };
+    A['admin.apikeys.create'] = function (p, u) {
+      need(u, ['super']);
+      var label = clip(p.label, 80);
+      if (label.length < 2) fail('กรุณาตั้งชื่อ Key เช่น ชื่อเว็บไซต์ที่จะนำไปใช้');
+      var raw = 'kpp_' + store.sha256(store.uuid() + store.uuid() + Date.now()).slice(0, 40);
+      var rec = { id: store.uuid(), label: label, prefix: raw.slice(0, 10), key_hash: store.sha256(raw), status: 'active', created_at: store.now(), created_by: str(u.name), last_used: '' };
+      store.insert(T.APIKEYS, rec);
+      audit(u, 'apikey_create', 'สร้าง API Key: ' + label + ' (' + rec.prefix + '…)', p._ua);
+      var out = publicKey(rec); out.key = raw;
+      return out;
+    };
+    A['admin.apikeys.revoke'] = function (p, u) {
+      need(u, ['super']);
+      var k = store.rows(T.APIKEYS).filter(function (x) { return str(x.id) === str(p.id); })[0];
+      if (!k) fail('ไม่พบ API Key');
+      store.update(T.APIKEYS, function (x) { return str(x.id) === str(k.id); }, { status: 'revoked' });
+      audit(u, 'apikey_revoke', 'ยกเลิก API Key: ' + k.label + ' (' + k.prefix + '…)', p._ua);
+      return true;
+    };
+
     var OPEN = { 'public.bootstrap': 1, 'public.summary': 1, 'auth.register': 1, 'auth.login': 1 };
 
     function handle(action, payload) {
@@ -874,8 +1072,11 @@ var AGServer = (function () {
       if (!fn) fail('ไม่รู้จักคำสั่ง: ' + action);
       if (OPEN[action]) return fn(payload, null);
       var u = auth(payload.token);
-      return fn(payload, u);
+      var res = fn(payload, u);
+      if (WRITES[action]) bump();
+      return res;
     }
+    var WRITES = { 'data.save': 1, 'data.withdraw': 1, 'data.review': 1, 'admin.rounds.save': 1, 'admin.rounds.generate': 1, 'admin.settings.save': 1 };
 
     /** สร้างโครงสร้างตารางและข้อมูลตั้งต้น (เรียกจาก setup) */
     function seed(opts) {
@@ -920,7 +1121,7 @@ var AGServer = (function () {
       return rounds();
     };
 
-    return { handle: handle, seed: seed, actions: A, settings: settings, records: records, dataColumns: function () { return dataColumns(items); } };
+    return { handle: handle, api: api, seed: seed, actions: A, settings: settings, records: records, dataColumns: function () { return dataColumns(items); } };
   }
 
   return { create: create, COLS: COLS, T: T, DEFAULT_SETTINGS: DEFAULT_SETTINGS, ROLE_TH: ROLE_TH, dataColumns: dataColumns,

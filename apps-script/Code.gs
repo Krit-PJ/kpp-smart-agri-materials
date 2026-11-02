@@ -16,7 +16,8 @@ var SHEET_ID = '1MjD6vY_FDOiS_EiaMhWEDbcnWNwJfzmTACsTmoHVnis';
 
 function doGet(e) {
   var p = (e && e.parameter) || {};
-  if (!p.action) return json_({ ok: true, data: { service: 'KPP Smart Agri-Materials API', time: new Date().toISOString() } });
+  if (p.api || p.endpoint) return dataApi_(p);
+  if (!p.action) return json_({ ok: true, data: { service: 'KPP Smart Agri-Materials API', data_api: '?api=v1&endpoint=meta', time: new Date().toISOString() } });
   if (p.action !== 'public.bootstrap' && p.action !== 'public.summary') return json_({ ok: false, error: 'ใช้ POST สำหรับคำสั่งนี้' });
   return run_(p.action, {});
 }
@@ -37,6 +38,23 @@ function run_(action, payload) {
   }
 }
 
+/** Data API v1 สำหรับ Dashboard ภายนอก (GET) — รองรับ JSON, CSV และ JSONP (callback=) */
+function dataApi_(p) {
+  var cb = String(p.callback || '');
+  if (cb && !/^[A-Za-z_$][\w$.]{0,60}$/.test(cb)) cb = '';
+  var out;
+  try {
+    if (p.api && p.api !== 'v1') throw Object.assign(new Error('รองรับเฉพาะ api=v1'), { code: 'bad_version' });
+    var res = AGServer.create(new SheetStore_(), AG_ITEMS).api(p);
+    if (res.csv && !cb) return ContentService.createTextOutput(res.body).setMimeType(ContentService.MimeType.CSV);
+    out = res.csv ? { ok: true, csv: res.body } : res.body;
+  } catch (err) {
+    out = { ok: false, api_version: '1', error: String(err && err.message || err), code: err && err.code || 'error' };
+  }
+  if (cb) return ContentService.createTextOutput(cb + '(' + JSON.stringify(out) + ');').setMimeType(ContentService.MimeType.JAVASCRIPT);
+  return json_(out);
+}
+
 function json_(o) {
   return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON);
 }
@@ -52,6 +70,12 @@ function SheetStore_() {
 }
 SheetStore_.prototype.sheet_ = function (name) {
   var sh = this.ss.getSheetByName(name);
+  if (!sh && AGServer.COLS[name]) { // สร้างชีตที่เพิ่มในเวอร์ชันใหม่ให้อัตโนมัติ (เช่น ApiKeys)
+    sh = this.ss.insertSheet(name);
+    sh.getRange(1, 1, 1, AGServer.COLS[name].length).setValues([AGServer.COLS[name]]).setFontWeight('bold').setBackground('#dafbe1');
+    sh.getRange(2, 1, sh.getMaxRows() - 1, AGServer.COLS[name].length).setNumberFormat('@');
+    sh.setFrozenRows(1);
+  }
   if (!sh) throw new Error('ไม่พบชีต "' + name + '" — กรุณารันฟังก์ชัน setup ก่อน');
   return sh;
 };
@@ -152,6 +176,7 @@ function setup() {
   defs[T.ROUNDS] = cols.Rounds;
   defs[T.DATA] = AGServer.dataColumns(AG_ITEMS);
   defs[T.LOG] = cols.AccessLog;
+  defs[T.APIKEYS] = cols.ApiKeys;
   Object.keys(defs).forEach(function (name) {
     var sh = ss.getSheetByName(name) || ss.insertSheet(name);
     var lc = sh.getLastColumn();
@@ -165,6 +190,7 @@ function setup() {
   ss.getSheetByName(T.USERS).getRange('A:Q').setNumberFormat('@');
   ss.getSheetByName(T.ROUNDS).getRange('B:E').setNumberFormat('@');
   ss.getSheetByName(T.LOG).getRange('A:I').setNumberFormat('@');
+  ss.getSheetByName(T.APIKEYS).getRange('A:H').setNumberFormat('@');
   ss.getSheetByName(T.DATA).getRange(1, 1, ss.getSheetByName(T.DATA).getMaxRows(), AGServer.COLS.DataMeta.length).setNumberFormat('@');
   ss.getSheetByName(T.DATA).setFrozenColumns(3);
   ss.getSheetByName(T.SETTINGS).getRange('B:B').setNumberFormat('@');

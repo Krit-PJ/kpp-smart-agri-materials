@@ -43,6 +43,8 @@ var S = {
       return '<option value="' + d.code + '"' + (sel === d.code ? ' selected' : '') + '>' + U.esc(d.name) + '</option>';
     }).join('');
   },
+  /** ส่วน "ตัวชี้วัดอื่น" (นอกเหนือข้อ 2.2) — ผู้ดูแลระดับจังหวัดเปิด-ปิดได้ ค่าเริ่มต้นปิด */
+  showOtherIndicators: function () { return S.settings.SHOW_OTHER_INDICATORS === 'TRUE'; },
   qrImage: function () { return S.settings.QR_IMAGE || 'assets/img/qr-default.png'; }
 };
 

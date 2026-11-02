@@ -178,3 +178,61 @@ const row = AGServer.recordToRow(AG_ITEMS, AGCore.recordOf(recs, 'D01', 0), 'เ
 const back = AGServer.rowToRecord(AG_ITEMS, row);
 assert.strictEqual(back.values.R29.v, 10);
 console.log('✓ server tests passed (' + logs.length + ' log rows)');
+
+// ═════════ ตัวชี้วัดอื่น: ค่าเริ่มต้นปิด, ผู้ดูแลจังหวัดเปิด-ปิดได้ ═════════
+assert.strictEqual(call('public.bootstrap').settings.SHOW_OTHER_INDICATORS, 'FALSE');
+const MT2 = call('auth.login', { username: 'mini01', password: 'abc123' }).token;
+call('admin.settings.save', { token: MT2, values: { SHOW_OTHER_INDICATORS: 'TRUE' } });
+assert.strictEqual(call('public.bootstrap').settings.SHOW_OTHER_INDICATORS, 'TRUE');
+err('admin.settings.save', { token: MT2, values: { API_REQUIRE_KEY: 'FALSE' } }, /ไม่มีสิทธิ์/);
+err('admin.settings.save', { token: A1, values: { SHOW_OTHER_INDICATORS: 'FALSE' } }, /ไม่มีสิทธิ์/);
+
+// ═════════ Data API v1 ═════════
+const apiErr = (p, code) => { try { S.api(p); assert.fail('ควร error'); } catch (e) { assert.strictEqual(e.code, code, e.message); } };
+apiErr({ endpoint: 'summary' }, 'key_required');
+apiErr({ endpoint: 'summary', key: 'kpp_wrong' }, 'invalid_key');
+err('admin.apikeys.create', { token: MT2, label: 'x' }, /ไม่มีสิทธิ์/);
+const key = call('admin.apikeys.create', { token: ST2, label: 'Dashboard จังหวัด' });
+assert(/^kpp_[0-9a-f]{40}$/.test(key.key));
+assert(!JSON.stringify(call('admin.apikeys.list', { token: ST2 })).includes(key.key), 'ไม่เก็บ/ไม่แสดง key เต็ม');
+apiErr({ endpoint: 'nope', key: key.key }, 'bad_endpoint');
+apiErr({ endpoint: 'summary', key: key.key, round: 99 }, 'bad_round');
+apiErr({ endpoint: 'summary', key: key.key, items: 'X1' }, 'bad_items');
+let r = S.api({ endpoint: 'meta', key: key.key });
+assert.strictEqual(r.body.ok, true); assert.strictEqual(r.body.api_version, '1');
+assert.strictEqual(r.body.data.districts.length, 11); assert(r.body.data.items.find(i => i.id === 'R31').agri);
+r = S.api({ endpoint: 'summary', key: key.key, round: 1 });
+const sum = r.body.data;
+assert.deepStrictEqual(sum.items.map(i => i.id), ['R29', 'R30', 'R31', 'R32']);
+const pCheck = AGCore.computeProvince(AG_ITEMS, call('data.records', { token: ST2 }).filter(AGCore.isCounted), boot.districts, 1);
+assert.strictEqual(sum.items[0].cumulative, pCheck.items.R29.cum);
+assert.strictEqual(sum.items[0].by_district.D01.cumulative, pCheck.items.R29.byDistrict.D01.cum);
+assert.strictEqual(sum.reported.count, pCheck.reported.length);
+assert(!JSON.stringify(sum).includes('สมชาย') && !JSON.stringify(sum).includes('0812345678'), 'ไม่มีข้อมูลส่วนบุคคล');
+// cache + ล้าง cache เมื่อมีการบันทึก
+assert.strictEqual(S.api({ endpoint: 'summary', key: key.key, round: 1 }).cached, true);
+call('data.save', { token: ST2, round: 1, district: 'D06', mode: 'submit', values: { R29: { v: 4 } } });
+const after = S.api({ endpoint: 'summary', key: key.key, round: 1 });
+assert.strictEqual(after.cached, false);
+assert.strictEqual(after.body.data.items[0].cumulative, sum.items[0].cumulative + 4);
+r = S.api({ endpoint: 'districts', key: key.key, round: 1, items: 'R29,R31', district: 'd06' });
+assert.strictEqual(r.body.data.districts.length, 1); assert.strictEqual(r.body.data.districts[0].items.R29.week, 4);
+r = S.api({ endpoint: 'timeseries', key: key.key, round: 2, items: 'R29' });
+assert.deepStrictEqual(r.body.data.series.map(x => x.round), [0, 1, 2]);
+assert.strictEqual(r.body.data.series[1].values.R29.cumulative, after.body.data.items[0].cumulative);
+r = S.api({ endpoint: 'status', key: key.key, round: 2 });
+assert.strictEqual(r.body.data.districts.find(d => d.code === 'D01').rounds['1'].status, 'accepted');
+r = S.api({ endpoint: 'districts', key: key.key, round: 1, format: 'csv' });
+assert(r.csv && r.body.startsWith('﻿round,district_code') && r.body.split('\r\n').length === 1 + 11 * 4);
+// เปิดสาธารณะ / ปิด API / ยกเลิก key
+call('admin.settings.save', { token: ST2, values: { API_REQUIRE_KEY: 'FALSE' } });
+assert.strictEqual(S.api({ endpoint: 'meta' }).body.ok, true);
+call('admin.settings.save', { token: ST2, values: { API_REQUIRE_KEY: 'TRUE', API_ENABLED: 'FALSE' } });
+apiErr({ endpoint: 'meta', key: key.key }, 'api_disabled');
+call('admin.settings.save', { token: ST2, values: { API_ENABLED: 'TRUE' } });
+call('admin.apikeys.revoke', { token: ST2, id: key.id });
+apiErr({ endpoint: 'meta', key: key.key }, 'invalid_key');
+const logs2 = call('admin.logs', { token: ST2 }).map(l => l.action);
+assert(logs2.includes('apikey_create') && logs2.includes('apikey_revoke'));
+console.log('✓ settings toggle + Data API tests passed');
+

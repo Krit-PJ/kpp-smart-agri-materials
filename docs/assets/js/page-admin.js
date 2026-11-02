@@ -126,7 +126,7 @@
     review_accept: ['ตรวจรับรายงาน', 'review'], review_return: ['ส่งกลับแก้ไข', 'review'],
     print: ['พิมพ์รายงาน', 'data'], export_xlsx: ['ดาวน์โหลด Excel', 'data'], export_csv: ['ดาวน์โหลด CSV', 'data'], view_status: ['ดูสถานะ', 'data'],
     user_create: ['เพิ่มผู้ใช้', 'admin'], user_update: ['แก้ไขผู้ใช้', 'admin'], user_delete: ['ลบผู้ใช้', 'admin'],
-    settings_update: ['แก้ไขการตั้งค่า', 'admin'], rounds_update: ['แก้ไขรอบรายงาน', 'admin'], password_change: ['เปลี่ยนรหัสผ่าน', 'auth'], profile_update: ['แก้ไขข้อมูลส่วนตัว', 'auth'], setup: ['ติดตั้งระบบ', 'admin']
+    settings_update: ['แก้ไขการตั้งค่า', 'admin'], rounds_update: ['แก้ไขรอบรายงาน', 'admin'], password_change: ['เปลี่ยนรหัสผ่าน', 'auth'], profile_update: ['แก้ไขข้อมูลส่วนตัว', 'auth'], setup: ['ติดตั้งระบบ', 'admin'], apikey_create: ['สร้าง API Key', 'admin'], apikey_revoke: ['ยกเลิก API Key', 'admin']
   };
   var LF = { q: '', role: '', grp: '', from: '', to: '', n: 100 };
   Pages.logs = {
@@ -218,9 +218,16 @@
 
     h.push('<div class="card"><div class="card-h"><h2>การเข้าถึงข้อมูล</h2><button class="btn sm primary" id="aSave">' + U.icon('save') + 'บันทึก</button></div><div class="card-b" style="display:grid;gap:12px">' +
       '<label class="switch"><input type="checkbox" data-set="STATUS_VISIBLE_TO_DISTRICT"' + (val.STATUS_VISIBLE_TO_DISTRICT === 'TRUE' ? ' checked' : '') + '> ให้เจ้าหน้าที่อำเภอดู "สถานะการส่งรายงาน" ของทุกอำเภอได้ <span class="small muted">(ค่าเริ่มต้น: ปิด)</span></label>' +
+      '<label class="switch"><input type="checkbox" data-set="SHOW_OTHER_INDICATORS"' + (val.SHOW_OTHER_INDICATORS === 'TRUE' ? ' checked' : '') + '> แสดงส่วน "ตัวชี้วัดอื่น" (นอกเหนือข้อ 2.2 พื้นที่เกษตร) ในแผนที่และกราฟเปรียบเทียบ <span class="small muted">(ค่าเริ่มต้น: ปิด · แบบกรอกและแบบพิมพ์แสดงครบทุกข้อเสมอ)</span></label>' +
       (sup ? '<label class="switch"><input type="checkbox" data-set="REGISTRATION_OPEN"' + (val.REGISTRATION_OPEN === 'TRUE' ? ' checked' : '') + '> เปิดให้เจ้าหน้าที่อำเภอลงทะเบียนเอง (เข้าใช้งานได้ทันที)</label>' +
         '<label class="switch"><input type="checkbox" data-set="PUBLIC_DASHBOARD"' + (val.PUBLIC_DASHBOARD === 'TRUE' ? ' checked' : '') + '> แสดงแผนที่สรุปผลต่อสาธารณะ (เฉพาะยอดรวมของรายงานที่ส่งแล้ว ไม่มีข้อมูลส่วนบุคคล)</label>' +
         '<label class="fld" style="max-width:280px"><span>อายุการเข้าสู่ระบบ (ชั่วโมง)</span><input type="number" min="1" max="720" data-set="SESSION_HOURS" value="' + U.esc(val.SESSION_HOURS) + '"></label>' : '') + '</div></div>');
+    if (sup) h.push('<div class="card" id="apiCard"><div class="card-h"><h2>Data API สำหรับ Dashboard ภายนอก</h2><a class="btn sm" href="api.html" target="_blank" rel="noopener">' + U.icon('file') + 'เอกสาร API</a><button class="btn sm primary" id="apiSave">' + U.icon('save') + 'บันทึก</button>' +
+      '<p>ให้เว็บไซต์อื่นดึงยอดสรุป (เฉพาะรายงานที่ส่งแล้ว/ตรวจรับแล้ว ไม่มีข้อมูลส่วนบุคคล) ผ่าน GET · JSON / CSV / JSONP · cache 5 นาที</p></div><div class="card-b" style="display:grid;gap:12px">' +
+      '<label class="switch"><input type="checkbox" data-set="API_ENABLED"' + (val.API_ENABLED === 'TRUE' ? ' checked' : '') + '> เปิดใช้งาน Data API</label>' +
+      '<label class="switch"><input type="checkbox" data-set="API_REQUIRE_KEY"' + (val.API_REQUIRE_KEY === 'TRUE' ? ' checked' : '') + '> ต้องใช้ API Key <span class="small muted">(แนะนำ: เปิด เพื่อยกเลิกสิทธิ์รายเว็บได้)</span></label>' +
+      '<div class="fld"><span>URL ของ API</span><div class="row" style="gap:6px;flex-wrap:nowrap"><input id="apiUrl" readonly value="' + U.esc(API.demo ? '(โหมดทดลอง — ยังไม่มี URL จริง)' : window.KPP_CONFIG.API_URL + '?api=v1&endpoint=summary') + '"><button class="btn sm" id="apiCopy">' + U.icon('copy') + '</button></div></div>' +
+      '<div class="row" style="justify-content:space-between;align-items:center"><b style="font-family:var(--display)">API Key</b><button class="btn sm" id="keyAdd">' + U.icon('plus') + 'สร้าง Key</button></div><div id="keyList" class="small muted">กำลังโหลด…</div></div></div>');
     if (sup) h.push('<div class="card"><div class="card-h"><h2>ฐานข้อมูล</h2></div><div class="card-b small">' + (API.demo ? '<div class="notice warn" style="margin:0 0 10px">' + U.icon('info') + '<div>กำลังใช้ <b>โหมดทดลอง</b> ข้อมูลเก็บในเบราว์เซอร์นี้ · ตั้งค่า API_URL ใน assets/js/config.js เพื่อเชื่อม Google Sheets</div></div><button class="btn sm danger" id="demoReset">' + U.icon('refresh') + 'ล้างข้อมูลทดลองและสร้างใหม่</button>' :
       'เชื่อมต่อ Google Apps Script แล้ว · ') + (window.KPP_CONFIG.SHEET_URL ? ' <a href="' + U.esc(window.KPP_CONFIG.SHEET_URL) + '" target="_blank" rel="noopener">เปิด Google Sheet ฐานข้อมูล</a>' : '') + '</div></div>');
     view.innerHTML = h.join('');
@@ -271,8 +278,53 @@
       var q = qrcode(0, 'M'); q.addData(link); q.make(); qr = q.createDataURL(6, 0); U.$('sQr').src = qr; U.toast('สร้าง QR แล้ว กด "บันทึก" เพื่อใช้งาน');
     };
     U.$('sQrReset').onclick = function () { qr = ''; U.$('sQr').src = 'assets/img/qr-default.png'; };
+    if (sup) apiCard();
     var dr = U.$('demoReset');
     if (dr) dr.onclick = function () { U.confirm('ล้างข้อมูลทดลอง', 'ลบข้อมูลทดลองทั้งหมดในเบราว์เซอร์นี้และสร้างข้อมูลตัวอย่างใหม่', 'ล้างข้อมูล', 'danger solid').then(function (ok) { if (ok) { API.resetDemo(); U.store('kpp-session', null); location.hash = '#map'; location.reload(); } }); };
+  }
+
+  /* ── Data API: สวิตช์ + จัดการ API Key (Super Admin) ── */
+  function apiCard() {
+    U.$('apiSave').onclick = function () {
+      var vals = {};
+      U.$('apiCard').querySelectorAll('[data-set]').forEach(function (i) { vals[i.dataset.set] = i.checked ? 'TRUE' : 'FALSE'; });
+      S.call('admin.settings.save', { values: vals }).then(function (s) { S.settings = s; U.toast('บันทึกการตั้งค่า Data API แล้ว', 'ok'); }).catch(function (e) { U.toast(e.message, 'err'); });
+    };
+    U.$('apiCopy').onclick = function () { copyText(U.$('apiUrl').value); };
+    function load() {
+      S.call('admin.apikeys.list').then(function (keys) {
+        U.$('keyList').innerHTML = keys.length ? '<div class="tbl-wrap"><table class="t"><thead><tr><th>ชื่อ (ใช้กับเว็บไซต์)</th><th>Key</th><th>สร้างเมื่อ</th><th>ใช้ล่าสุด</th><th>สถานะ</th><th></th></tr></thead><tbody>' +
+          keys.map(function (k) {
+            var on = k.status !== 'revoked';
+            return '<tr><td><b>' + U.esc(k.label) + '</b><div class="muted">โดย ' + U.esc(k.created_by) + '</div></td><td><code>' + U.esc(k.prefix) + '…</code></td><td>' + U.thDateTime(k.created_at) + '</td><td>' + (k.last_used ? U.thDateTime(k.last_used) : '–') + '</td>' +
+              '<td>' + (on ? '<span class="chip st-submitted"><i></i>ใช้งาน</span>' : '<span class="chip st-returned"><i></i>ยกเลิกแล้ว</span>') + '</td><td>' + (on ? '<button class="btn sm danger" data-revoke-key="' + k.id + '">ยกเลิก</button>' : '') + '</td></tr>';
+          }).join('') + '</tbody></table></div>' : 'ยังไม่มี API Key';
+        U.$('keyList').querySelectorAll('[data-revoke-key]').forEach(function (b) {
+          b.onclick = function () {
+            U.confirm('ยกเลิก API Key', 'เว็บไซต์ที่ใช้ Key นี้จะดึงข้อมูลไม่ได้ทันที และยกเลิกแล้วเปิดคืนไม่ได้', 'ยกเลิก Key', 'danger solid').then(function (ok) {
+              if (ok) S.call('admin.apikeys.revoke', { id: b.dataset.revokeKey }).then(function () { U.toast('ยกเลิก API Key แล้ว', 'ok'); load(); }).catch(function (e) { U.toast(e.message, 'err'); });
+            });
+          };
+        });
+      }).catch(function (e) { U.$('keyList').textContent = e.message; });
+    }
+    U.$('keyAdd').onclick = function () {
+      U.modal({ title: 'สร้าง API Key', body: '<label class="fld"><span>ชื่อ Key (เช่น ชื่อเว็บไซต์ Dashboard ที่นำไปใช้)</span><input id="keyLabel" maxlength="80"></label>',
+        actions: [{ label: 'ยกเลิก', cls: 'ghost' }, { label: U.icon('key') + 'สร้าง', cls: 'primary', onClick: function () {
+          return S.call('admin.apikeys.create', { label: U.$('keyLabel').value }).then(function (k) {
+            load();
+            U.modal({ title: 'API Key ใหม่', dismiss: false, body: '<div class="notice warn">' + U.icon('alert') + '<div><b>คัดลอกเก็บไว้ตอนนี้</b> ระบบจะไม่แสดง Key เต็มอีก (เก็บเฉพาะค่าเข้ารหัส)</div></div>' +
+              '<label class="fld"><span>' + U.esc(k.label) + '</span><input id="newKey" readonly value="' + U.esc(k.key) + '"></label>' +
+              '<p class="small muted">ตัวอย่าง: <code>' + U.esc((API.demo ? '<API_URL>' : window.KPP_CONFIG.API_URL) + '?api=v1&endpoint=summary&key=' + k.key) + '</code></p>',
+              actions: [{ label: U.icon('copy') + 'คัดลอก Key', cls: '', onClick: function () { copyText(k.key); return false; } }, { label: 'เสร็จสิ้น', cls: 'primary' }] });
+          });
+        } }] });
+    };
+    load();
+  }
+  function copyText(t) {
+    (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(function () { U.toast('คัดลอกแล้ว', 'ok'); })
+      .catch(function () { var i = document.createElement('textarea'); i.value = t; document.body.appendChild(i); i.select(); document.execCommand('copy'); i.remove(); U.toast('คัดลอกแล้ว'); });
   }
 
   /* ═════════ ข้อมูลส่วนตัว ═════════ */
