@@ -1,6 +1,6 @@
 /* หน้ารายงานระดับอำเภอ และสรุปผลระดับจังหวัด */
 (function () {
-  function itemOf(id) { return AG_ITEMS.filter(function (i) { return i.id === id; })[0]; }
+  var itemOf = U.item;
   var AGRI = [['R29', 'megaphone'], ['R30', 'recycle'], ['R31', 'tractor'], ['R32', 'straw']];
 
   function kpi(it, cum, week, unit, ic) {
@@ -41,7 +41,7 @@
       '<div class="bar-mini"><i style="width:' + (nRounds ? Math.round(sent / nRounds * 100) : 0) + '%"></i></div></div></div></div>');
 
     var t = ['<div class="card"><div class="card-h"><h2>ผลการดำเนินงานตามแบบรายงาน</h2></div><div class="tbl-wrap"><table class="t"><thead><tr><th>มาตรการ</th><th>ครั้งนี้</th><th class="n">รวม (ครั้งนี้)</th><th class="n">รวมสะสม</th><th>หน่วยนับ</th></tr></thead><tbody>'];
-    AG_ITEMS.forEach(function (it) {
+    AGCore.shownItems(AG_ITEMS, comp).forEach(function (it) {
       var agri = it.code === '2.2' ? ' agri' : '';
       if (it.type === 'header') { t.push('<tr class="' + (it.level ? 'grp' : 'sec') + agri + '"><td colspan="5">' + (it.level ? '<span class="code">' + it.code + '</span>' : '') + U.pm(it.label) + '</td></tr>'); return; }
       var x = comp.items[it.id], num = it.type === 'num' || it.type === 'other';
@@ -106,14 +106,14 @@
       '<div class="bar-mini"><i style="width:' + Math.round(p.reported.length / nd * 100) + '%"></i></div><div class="small muted" style="margin-top:4px">ตรวจรับ ' + cnt.accepted + ' · รอตรวจ ' + cnt.submitted + ' · ร่าง ' + cnt.draft + ' · ส่งกลับ ' + cnt.returned + '</div></div></div>' +
       AGRI.slice(0, 3).map(function (a) { var x = p.items[a[0]]; return kpi(itemOf(a[0]), x.cum, x.week, x.unit, a[1]); }).join('') + '</div>'];
 
-    var nums = AG_ITEMS.filter(function (i) { return (i.type === 'num' || i.type === 'other') && (S.showOtherIndicators() || i.code === '2.2'); });
+    var nums = AGCore.shownItems(AG_ITEMS, p).filter(function (i) { return (i.type === 'num' || i.type === 'other') && (S.showOtherIndicators() || i.code === '2.2'); });
     if (!nums.some(function (i) { return i.id === P.item; })) P.item = 'R31';
     h.push('<div class="card"><div class="card-h"><h2>เปรียบเทียบยอดสะสมรายอำเภอ</h2><select id="pItem" style="width:auto;max-width:100%">' +
       nums.map(function (i) { return '<option value="' + i.id + '"' + (P.item === i.id ? ' selected' : '') + '>' + U.esc(i.code + ' ' + (i.label.length > 70 ? i.label.slice(0, 68) + '…' : i.label)) + '</option>'; }).join('') +
       '</select></div><div class="legend" style="padding:10px 18px 4px"><span><i style="background:var(--primary-light)"></i>สะสมก่อนหน้า</span><span><i style="background:var(--accent)"></i>เพิ่มในครั้งนี้</span><span id="pUnit"></span></div><div class="hbars" id="pBars"></div></div>');
 
     var t = ['<div class="card"><div class="card-h"><h2>ผลการดำเนินงานรวมจังหวัด</h2><p>คลิกแถวที่มีตัวเลขเพื่อดูแยกรายอำเภอ · มี/ไม่มี = จำนวนอำเภอที่รายงานในครั้งนี้</p></div><div class="tbl-wrap"><table class="t" id="pTable"><thead><tr><th>มาตรการ</th><th class="n">มี</th><th class="n">ไม่มี</th><th class="n">รวม (ครั้งนี้)</th><th class="n">รวมสะสม</th><th>หน่วยนับ</th></tr></thead><tbody>'];
-    AG_ITEMS.forEach(function (it) {
+    AGCore.shownItems(AG_ITEMS, p).forEach(function (it) {
       var agri = it.code === '2.2' ? ' agri' : '';
       if (it.type === 'header') { t.push('<tr class="' + (it.level ? 'grp' : 'sec') + agri + '"><td colspan="6">' + (it.level ? '<span class="code">' + it.code + '</span>' : '') + U.pm(it.label) + '</td></tr>'); return; }
       var x = p.items[it.id], num = it.type === 'num' || it.type === 'other', click = num && x.cum !== null;

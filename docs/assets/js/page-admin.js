@@ -126,7 +126,7 @@
     review_accept: ['ตรวจรับรายงาน', 'review'], review_return: ['ส่งกลับแก้ไข', 'review'],
     print: ['พิมพ์รายงาน', 'data'], export_xlsx: ['ดาวน์โหลด Excel', 'data'], export_csv: ['ดาวน์โหลด CSV', 'data'], view_status: ['ดูสถานะ', 'data'],
     user_create: ['เพิ่มผู้ใช้', 'admin'], user_update: ['แก้ไขผู้ใช้', 'admin'], user_delete: ['ลบผู้ใช้', 'admin'],
-    settings_update: ['แก้ไขการตั้งค่า', 'admin'], rounds_update: ['แก้ไขรอบรายงาน', 'admin'], password_change: ['เปลี่ยนรหัสผ่าน', 'auth'], profile_update: ['แก้ไขข้อมูลส่วนตัว', 'auth'], setup: ['ติดตั้งระบบ', 'admin'], apikey_create: ['สร้าง API Key', 'admin'], apikey_revoke: ['ยกเลิก API Key', 'admin']
+    settings_update: ['แก้ไขการตั้งค่า', 'admin'], items_update: ['แก้ไขแบบฟอร์มรายงาน', 'admin'], items_reset: ['คืนค่าแบบฟอร์มต้นฉบับ', 'admin'], rounds_update: ['แก้ไขรอบรายงาน', 'admin'], password_change: ['เปลี่ยนรหัสผ่าน', 'auth'], profile_update: ['แก้ไขข้อมูลส่วนตัว', 'auth'], setup: ['ติดตั้งระบบ', 'admin'], apikey_create: ['สร้าง API Key', 'admin'], apikey_revoke: ['ยกเลิก API Key', 'admin']
   };
   var LF = { q: '', role: '', grp: '', from: '', to: '', n: 100 };
   Pages.logs = {
@@ -207,14 +207,10 @@
           '<td><input type="date" data-k="due" value="' + r.due + '"' + (r.round === 0 ? ' disabled' : '') + '></td><td><label class="switch"><input type="checkbox" data-k="open"' + (r.open ? ' checked' : '') + '></label></td></tr>';
       }).join('') + '</tbody></table></div></div>'];
 
-    var keys = ['TITLE', 'SEASON', 'OFFICE', 'DOC_REF_1', 'DOC_REF_2', 'PROV_REPORTER_NAME', 'PROV_REPORTER_TITLE', 'QR_NOTE', 'QR_LINK'];
-    h.push('<div class="card"><div class="card-h"><h2>หัวรายงานและ QR Code (ค่าเริ่มต้นของการพิมพ์)</h2><button class="btn sm primary" id="hSave">' + U.icon('save') + 'บันทึก</button></div><div class="card-b grid2">' +
-      keys.map(function (k) {
-        var s = list.filter(function (x) { return x.key === k; })[0]; if (!s) return '';
-        var long = k === 'DOC_REF_2' || k === 'TITLE';
-        return '<label class="fld' + (long ? ' span2' : '') + '"><span>' + U.esc(s.note) + '</span>' + (k === 'DOC_REF_2' ? '<textarea data-set="' + k + '" rows="3">' + U.esc(s.value) + '</textarea>' : '<input data-set="' + k + '" value="' + U.esc(s.value) + '">') + '</label>';
-      }).join('') +
-      '<div class="fld span2"><span>รูป QR Code</span><div class="qr-box"><img id="sQr" src="' + U.esc(val.QR_IMAGE || 'assets/img/qr-default.png') + '" alt="QR"><label class="btn sm">' + U.icon('download') + 'อัปโหลดรูป<input type="file" id="sQrFile" accept="image/*" hidden></label><button class="btn sm" id="sQrGen">สร้างจากลิงก์</button><button class="btn sm ghost" id="sQrReset">ใช้รูปตั้งต้น</button></div></div></div></div>');
+    // หัวรายงานและ QR Code แก้ไขที่หน้า "พิมพ์รายงาน" ที่เดียว (เห็นตัวอย่างก่อนบันทึก) — ไม่ซ้ำกับหน้านี้
+    h.push('<div class="card"><div class="card-h"><h2>หัวรายงานและ QR Code</h2><a class="btn sm primary" href="#print?scope=province">' + U.icon('print') + 'แก้ไขที่หน้าพิมพ์รายงาน</a>' +
+      '<p>ชื่อแบบรายงาน ปี หน่วยงาน เลขหนังสือสั่งการ ผู้รายงาน และ QR Code แก้ไขพร้อมดูตัวอย่างได้ที่หน้า "พิมพ์รายงาน" แล้วกด "บันทึกหัวรายงาน/QR เป็นค่าเริ่มต้น"</p></div>' +
+      '<div class="card-b small muted">ปัจจุบัน: ' + U.esc(val.TITLE) + ' ปี ' + U.esc(val.SEASON) + ' · ' + U.esc(val.OFFICE) + '</div></div>');
 
     h.push('<div class="card"><div class="card-h"><h2>การเข้าถึงข้อมูล</h2><button class="btn sm primary" id="aSave">' + U.icon('save') + 'บันทึก</button></div><div class="card-b" style="display:grid;gap:12px">' +
       '<label class="switch"><input type="checkbox" data-set="STATUS_VISIBLE_TO_DISTRICT"' + (val.STATUS_VISIBLE_TO_DISTRICT === 'TRUE' ? ' checked' : '') + '> ให้เจ้าหน้าที่อำเภอดู "สถานะการส่งรายงาน" ของทุกอำเภอได้ <span class="small muted">(ค่าเริ่มต้น: ปิด)</span></label>' +
@@ -232,7 +228,6 @@
       'เชื่อมต่อ Google Apps Script แล้ว · ') + (window.KPP_CONFIG.SHEET_URL ? ' <a href="' + U.esc(window.KPP_CONFIG.SHEET_URL) + '" target="_blank" rel="noopener">เปิด Google Sheet ฐานข้อมูล</a>' : '') + '</div></div>');
     view.innerHTML = h.join('');
 
-    var qr = val.QR_IMAGE || '';
     U.$('rSave').onclick = function () {
       var out = [];
       U.$('rTable').querySelectorAll('tr[data-r]').forEach(function (tr) {
@@ -250,34 +245,7 @@
           return S.call('admin.rounds.generate', { count: Number(U.$('gN').value), start: U.$('gS').value }).then(function (r) { S.rounds = r; U.toast('สร้างรอบเพิ่มแล้ว', 'ok'); App.route(); });
         } }] });
     };
-    function saveKeys(sel, extra) {
-      var vals = extra || {};
-      view.querySelectorAll(sel).forEach(function (i) { vals[i.dataset.set] = i.type === 'checkbox' ? (i.checked ? 'TRUE' : 'FALSE') : i.value; });
-      return S.call('admin.settings.save', { values: vals }).then(function (s) { S.settings = s; App.renderNav(); U.toast('บันทึกการตั้งค่าแล้ว', 'ok'); }).catch(function (e) { U.toast(e.message, 'err'); });
-    }
-    U.$('hSave').onclick = function () { saveKeys('.card-b.grid2 [data-set]', { QR_IMAGE: qr }); };
     U.$('aSave').onclick = function () { var card = this.closest('.card'); var vals = {}; card.querySelectorAll('[data-set]').forEach(function (i) { vals[i.dataset.set] = i.type === 'checkbox' ? (i.checked ? 'TRUE' : 'FALSE') : i.value; }); S.call('admin.settings.save', { values: vals }).then(function (s) { S.settings = s; App.renderNav(); U.toast('บันทึกการตั้งค่าแล้ว', 'ok'); }).catch(function (e) { U.toast(e.message, 'err'); }); };
-    U.$('sQrFile').onchange = function (e) {
-      var f = e.target.files[0]; if (!f) return;
-      var rd = new FileReader();
-      rd.onload = function () {
-        var img = new Image();
-        img.onload = function () {
-          var k = Math.min(1, 320 / Math.max(img.width, img.height)), c = document.createElement('canvas');
-          c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-          var g = c.getContext('2d'); g.imageSmoothingEnabled = false; g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(img, 0, 0, c.width, c.height);
-          qr = c.toDataURL('image/png'); U.$('sQr').src = qr; U.toast('เลือกรูปแล้ว กด "บันทึก" เพื่อใช้งาน');
-        };
-        img.src = rd.result;
-      };
-      rd.readAsDataURL(f);
-    };
-    U.$('sQrGen').onclick = function () {
-      var link = view.querySelector('[data-set=QR_LINK]').value;
-      if (typeof qrcode === 'undefined' || !link) { U.toast('กรุณากรอกลิงก์ใต้ QR Code ก่อน', 'err'); return; }
-      var q = qrcode(0, 'M'); q.addData(link); q.make(); qr = q.createDataURL(6, 0); U.$('sQr').src = qr; U.toast('สร้าง QR แล้ว กด "บันทึก" เพื่อใช้งาน');
-    };
-    U.$('sQrReset').onclick = function () { qr = ''; U.$('sQr').src = 'assets/img/qr-default.png'; };
     if (sup) apiCard();
     var dr = U.$('demoReset');
     if (dr) dr.onclick = function () { U.confirm('ล้างข้อมูลทดลอง', 'ลบข้อมูลทดลองทั้งหมดในเบราว์เซอร์นี้และสร้างข้อมูลตัวอย่างใหม่', 'ล้างข้อมูล', 'danger solid').then(function (ok) { if (ok) { API.resetDemo(); U.store('kpp-session', null); location.hash = '#map'; location.reload(); } }); };

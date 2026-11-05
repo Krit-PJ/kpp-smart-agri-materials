@@ -1,7 +1,7 @@
 {
   "name": "kpp-smart-agri-materials-tests",
   "private": true,
-  "scripts": { "test": "node server.test.js && node gas.test.js" },
+  "scripts": { "test": "node server.test.js && node gas.test.js && node xlsx.test.js" },
   "devDependencies": {
     "@fontsource-variable/noto-sans-thai": "^5.0.0",
     "@fontsource/ibm-plex-sans-thai": "^5.0.0",

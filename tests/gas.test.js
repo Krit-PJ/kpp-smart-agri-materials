@@ -8,6 +8,7 @@ class Range { constructor(sh, r, c, nr, nc) { Object.assign(this, { sh, r, c, nr
     else if (typeof x === 'string' && /^\d+$/.test(x) && !this.sh.text) x = Number(x);
     this.sh.d[R][this.c - 1 + j] = x; })); return this; }
   setValue(x) { return this.setValues([[x]]); } setFontWeight() { return this; } setBackground() { return this; }
+  clearContent() { for (let i = 0; i < this.nr; i++) { const R = this.r - 1 + i; if (!this.sh.d[R]) continue; for (let j = 0; j < this.nc; j++) this.sh.d[R][this.c - 1 + j] = ''; } return this; }
   setNumberFormat() { this.sh.text = true; return this; } }
 class Sheet { constructor(n) { this.n = n; this.d = []; }
   getRange(a, b, c, d) { if (typeof a === 'string') return new Range(this, 1, 1, 1000, 30); return new Range(this, a, b, c || 1, d || 1); }
@@ -32,8 +33,9 @@ const ctx = { console, Date, Math, JSON, String, Number, Object, Array, Error, i
   Logger: { log() { } } };
 vm.createContext(ctx);
 const dir = path.join(__dirname, '..', 'apps-script');
-vm.runInContext(fs.readFileSync(dir + '/Lib.gs', 'utf8') + '\n' + fs.readFileSync(dir + '/Code.gs', 'utf8'), ctx);
+vm.runInContext(fs.readFileSync(dir + '/KPP-AllInOne.gs', 'utf8'), ctx); // ไฟล์เดียวกับที่ติดตั้งในระบบจริง
 const post = b => JSON.parse(ctx.doPost({ postData: { contents: JSON.stringify(b) } }).t);
+const AG_LEN = vm.runInContext('AG_ITEMS.length', ctx);
 ctx.setup(); ctx.setup();
 assert(!props.SUPER_PASSWORD, 'ลบรหัสผ่านออกจาก properties');
 let r = JSON.parse(ctx.doGet({ parameter: { action: 'public.bootstrap' } }).t);
@@ -69,3 +71,21 @@ const jp = get({ api: 'v1', endpoint: 'meta', key: k.data.key, callback: 'show' 
 assert.strictEqual(jp.m, 'js'); assert(jp.t.startsWith('show({"ok":true'));
 assert.strictEqual(JSON.parse(get({ api: 'v2', endpoint: 'meta', key: k.data.key }).t).code, 'bad_version');
 console.log('✓ Apps Script tests passed');
+
+// ระบบที่ติดตั้งก่อนเวอร์ชันนี้ (ไม่มีชีต Items): สร้างชีตอัตโนมัติ
+delete ss.sheets.Items;
+let pc = JSON.parse(get({ action: 'public.bootstrap' }).t); assert(pc.ok && pc.data.items === null, 'ไม่มีชีต Items = แบบฟอร์มต้นฉบับ');
+assert(ss.sheets.Items, 'สร้างชีต Items อัตโนมัติ');
+// แก้ไขแบบฟอร์มผ่าน Apps Script: เขียนชีต Items ครั้งเดียว (replaceAll) และคอลัมน์ข้อใหม่ในชีต Data
+let fi = post({ action: 'admin.items.get', token: su.data.token }); assert(fi.ok, fi.error);
+const L2 = fi.data.items.slice(); L2.splice(L2.findIndex(i => i.id === 'R32') + 1, 0, { label: 'อัดฟางก้อน', type: 'num', unit: 'ตัน', code: '2.2', level: 2 });
+fi = post({ action: 'admin.items.save', token: su.data.token, items: L2 }); assert(fi.ok, fi.error);
+assert.strictEqual(ss.sheets.Items.getLastRow(), AG_LEN + 2);
+s = post({ action: 'data.save', token: lg.data.token, round: 1, district: 'D03', mode: 'submit', values: { R31: { v: 130 }, N1: { v: 9 } } }); assert(s.ok, s.error);
+assert(ss.sheets.Data.d[0].includes('N1_v'), 'เพิ่มคอลัมน์ N1_v ในชีต Data');
+const recs2 = post({ action: 'data.records', token: su.data.token }); assert.strictEqual(recs2.data[0].values.N1.v, 9);
+pc = JSON.parse(get({ action: 'public.bootstrap' }).t); assert.strictEqual(pc.data.items.find(i => i.id === 'N1').unit, 'ตัน');
+ctx.writeProvinceSummary(1); assert(ss.sheets['สรุปจังหวัด'].d.some(r => r && r[1] === '- อัดฟางก้อน'), 'สรุปจังหวัดใช้แบบฟอร์มที่แก้ไข');
+fi = post({ action: 'admin.items.reset', token: su.data.token }); assert(fi.ok, fi.error);
+assert(fi.data.items.find(i => i.id === 'N1').retired, 'คืนค่าแล้วคงข้อที่มีข้อมูลไว้แบบยกเลิกใช้');
+console.log('✓ Apps Script editable form tests passed');

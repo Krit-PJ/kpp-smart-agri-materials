@@ -45,6 +45,14 @@ var S = {
   },
   /** ส่วน "ตัวชี้วัดอื่น" (นอกเหนือข้อ 2.2) — ผู้ดูแลระดับจังหวัดเปิด-ปิดได้ ค่าเริ่มต้นปิด */
   showOtherIndicators: function () { return S.settings.SHOW_OTHER_INDICATORS === 'TRUE'; },
+  /** ใช้แบบฟอร์มที่ Super Admin แก้ไข (list) หรือแบบฟอร์มต้นฉบับ (null) — แทนที่ AG_ITEMS ในที่เดิม ทุกหน้าจึงใช้ชุดเดียวกัน */
+  formCustom: false,
+  applyItems: function (list) {
+    var src = list && list.length ? list : AG_ITEMS_BASE;
+    AG_ITEMS.length = 0;
+    src.forEach(function (it) { AG_ITEMS.push(Object.assign({}, it)); });
+    S.formCustom = !!(list && list.length);
+  },
   qrImage: function () { return S.settings.QR_IMAGE || 'assets/img/qr-default.png'; }
 };
 
@@ -62,6 +70,7 @@ var App = (function () {
     { key: 'users', label: 'ผู้ใช้งาน', icon: 'users', roles: ['mini', 'super'] },
     { key: 'logs', label: 'บันทึกการเข้าใช้งาน', icon: 'shield', roles: ['mini', 'super'] },
     { key: 'settings', label: 'ตั้งค่ารายงานและระบบ', icon: 'gear', roles: ['mini', 'super'] },
+    { key: 'form', label: 'แบบฟอร์มรายงาน', icon: 'file', roles: ['super'] },
     { group: 'บัญชี' },
     { key: 'profile', label: 'ข้อมูลส่วนตัว', icon: 'user', roles: ['district', 'mini', 'super'] }
   ];
@@ -222,6 +231,7 @@ var App = (function () {
   function refreshBoot() {
     return API.call('public.bootstrap').then(function (b) {
       S.boot = b; S.settings = b.settings; S.districts = b.districts; S.rounds = b.rounds;
+      S.applyItems(b.items);
       return b;
     });
   }

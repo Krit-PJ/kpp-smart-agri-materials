@@ -13,7 +13,8 @@
  *                super    = ผู้ดูแลระบบสูงสุด (Super Admin)
  */
 var AGServer = (function () {
-  var T = { SETTINGS: 'Settings', DISTRICTS: 'Districts', USERS: 'Users', ROUNDS: 'Rounds', DATA: 'Data', LOG: 'AccessLog', APIKEYS: 'ApiKeys' };
+  var T = { SETTINGS: 'Settings', DISTRICTS: 'Districts', USERS: 'Users', ROUNDS: 'Rounds', DATA: 'Data', LOG: 'AccessLog', APIKEYS: 'ApiKeys',
+    ITEMS: 'Items' };
 
   var COLS = {
     Settings: ['key', 'value', 'note'],
@@ -23,6 +24,8 @@ var AGServer = (function () {
     Rounds: ['round', 'label', 'start', 'end', 'due', 'open'],
     AccessLog: ['time', 'user_id', 'account', 'name', 'role', 'district', 'action', 'detail', 'ua'],
     ApiKeys: ['id', 'label', 'prefix', 'key_hash', 'status', 'created_at', 'created_by', 'last_used'],
+    // ข้อคำถามของแบบฟอร์ม (ว่าง = ใช้แบบฟอร์มต้นฉบับ) — Super Admin แก้ไขผ่านหน้า "แบบฟอร์มรายงาน"
+    Items: ['id', 'sort', 'section', 'code', 'label', 'printLabel', 'unit', 'type', 'agg', 'level', 'print', 'row', 'h', 'status', 'updated_at', 'updated_by'],
     DataMeta: ['round', 'district', 'district_name', 'status', 'reporter', 'position', 'phone', 'sec4', 'sec5',
       'updated_at', 'updated_by', 'submitted_at', 'submitted_by', 'reviewed_at', 'reviewed_by', 'review_note']
   };
@@ -72,6 +75,26 @@ var AGServer = (function () {
   }
   function validPhone(p) { return /^0\d{8,9}$/.test(p); }
   function normUser(u) { return str(u).trim().toLowerCase(); }
+
+  /* ───────────── ข้อคำถามของแบบฟอร์ม ───────────── */
+  var ITEM_TYPES = { header: 1, num: 1, check: 1, other: 1 };
+  // ข้อที่ระบบใช้เป็นตัวชี้วัดหลัก (แผนที่ KPI และ API กลุ่ม agri) และหัวข้อ 2.2 พื้นที่เกษตร — แก้ถ้อยคำได้ แต่ลบ/ยกเลิกใช้/เปลี่ยนรูปแบบไม่ได้
+  var CORE_IDS = ['R28', 'R29', 'R30', 'R31', 'R32'];
+  function rowToItem(r) {
+    var row = r.row === '' || r.row === undefined || r.row === null ? null : Number(r.row);
+    return {
+      id: str(r.id), sort: Number(r.sort) || 0, section: str(r.section), code: str(r.code), label: str(r.label),
+      printLabel: str(r.printLabel) || str(r.label), unit: str(r.unit), type: ITEM_TYPES[r.type] ? str(r.type) : 'num',
+      agg: r.agg === 'latest' ? 'latest' : 'sum', level: Number(r.level) || 0, print: str(r.print),
+      row: isFinite(row) ? row : null, h: Number(r.h) || 24.75, retired: str(r.status) === 'retired'
+    };
+  }
+  function itemToRow(it, i, now, by) {
+    return { id: it.id, sort: i + 1, section: it.section, code: it.code, label: it.label, printLabel: it.printLabel, unit: it.unit, type: it.type,
+      agg: it.agg, level: it.level, print: it.print, row: it.row === null || it.row === undefined ? '' : it.row, h: it.h,
+      status: it.retired ? 'retired' : 'active', updated_at: now, updated_by: by };
+  }
+  function isSection(it) { return it.print === 'section' || (it.type === 'header' && it.level === 0); }
 
   /* ───────────── data row ↔ record ───────────── */
   function dataColumns(items) {
@@ -127,8 +150,19 @@ var AGServer = (function () {
   }
 
   /* ───────────── server factory ───────────── */
-  function create(store, items) {
-    items = items || (typeof AG_ITEMS !== 'undefined' ? AG_ITEMS : []);
+  function create(store, baseItems) {
+    baseItems = baseItems || (typeof AG_ITEMS !== 'undefined' ? AG_ITEMS : []);
+    // แบบฟอร์มต้นฉบับ (ในเบราว์เซอร์ AG_ITEMS อาจถูกแทนที่ด้วยแบบฟอร์มที่แก้ไขแล้ว จึงใช้สำเนา AG_ITEMS_BASE)
+    var BASE = (typeof AG_ITEMS_BASE !== 'undefined' && typeof AG_ITEMS !== 'undefined' && baseItems === AG_ITEMS ? AG_ITEMS_BASE : baseItems)
+      .map(function (o) { var c = {}; for (var k in o) c[k] = o[k]; return c; });
+    var items = BASE, customItems = false;
+    /** โหลดข้อคำถามจากชีต Items (ถ้ามี) — เรียกทุกครั้งที่เริ่มคำสั่ง */
+    function refreshItems() {
+      var rows = store.rows(T.ITEMS).filter(function (r) { return str(r.id); });
+      customItems = rows.length > 0;
+      items = customItems ? rows.map(rowToItem).sort(function (a, b) { return a.sort - b.sort; }) : BASE;
+      return items;
+    }
 
     function settings() {
       var o = {};
@@ -223,7 +257,8 @@ var AGServer = (function () {
     A['public.bootstrap'] = function () {
       var s = settings(), pub = {};
       PUBLIC_KEYS.forEach(function (k) { pub[k] = s[k]; });
-      return { settings: pub, districts: districts(), rounds: rounds(), today: store.today() };
+      // items = แบบฟอร์มที่ Super Admin แก้ไขแล้ว (null = ใช้แบบฟอร์มต้นฉบับที่มากับหน้าเว็บ)
+      return { settings: pub, districts: districts(), rounds: rounds(), today: store.today(), items: customItems ? items : null };
     };
 
     A['public.summary'] = function () {
@@ -548,6 +583,128 @@ var AGServer = (function () {
     };
 
 
+    /* ═════════ แบบฟอร์มรายงาน: เพิ่ม/แก้ไข/ลบ/ยกเลิกใช้ ข้อคำถาม (Super Admin เท่านั้น) ═════════
+     * กติกา: ข้อที่มีข้อมูลแล้ว → ลบไม่ได้ (ใช้ "ยกเลิกใช้" แทน ตัวเลขเดิมยังนับในยอดสะสม)
+     *        และเปลี่ยนรูปแบบคำตอบ/หน่วยนับ/วิธีนับไม่ได้ (ยอดสะสมจะบวกต่างหน่วยกัน)
+     *        หัวข้อหลัก 1–3 และตัวชี้วัดหลักข้อ 2.2 แก้ถ้อยคำได้อย่างเดียว */
+    function replaceTable(name, rows) {
+      if (store.replaceAll) return store.replaceAll(name, rows);
+      store.remove(name, function () { return true; });
+      rows.forEach(function (r) { store.insert(name, r); });
+    }
+    function itemUsage() {
+      var n = {};
+      records().forEach(function (r) { Object.keys(r.values || {}).forEach(function (id) { n[id] = (n[id] || 0) + 1; }); });
+      return n;
+    }
+    function itemsPayload() {
+      return { items: items, custom: customItems, usage: itemUsage(), core: CORE_IDS, baseIds: BASE.map(function (b) { return b.id; }) };
+    }
+    function itemName(it) { return 'ข้อ ' + (it.code || '-') + ' "' + clip(it.label, 40) + '"'; }
+
+    A['admin.items.get'] = function (p, u) { need(u, ['super']); return itemsPayload(); };
+
+    A['admin.items.save'] = function (p, u) {
+      need(u, ['super']);
+      var list = p.items;
+      if (!list || !list.length) fail('ไม่มีข้อคำถาม');
+      if (list.length > 400) fail('ข้อคำถามมากเกินไป (สูงสุด 400 ข้อ)');
+      return store.lock(function () {
+        refreshItems();
+        var cur = {}, usage = itemUsage(), seq = 0, seen = {}, sec = '', out = [];
+        items.forEach(function (it) { cur[it.id] = it; var m = /^N(\d+)$/.exec(it.id); if (m) seq = Math.max(seq, Number(m[1])); });
+        var log = { add: [], edit: [], retire: [], restore: [], del: [] }, oldOrder = items.map(function (x) { return x.id; }).join(',');
+        list.forEach(function (x, i) {
+          var id = str(x.id).trim().toUpperCase(), old = id ? cur[id] : null;
+          if (id && !old) fail('ไม่พบข้อคำถามรหัส ' + id + ' (อาจมีผู้แก้ไขพร้อมกัน กรุณาโหลดหน้าใหม่)');
+          if (!id) { do { seq++; id = 'N' + seq; } while (cur[id] || seen[id]); }
+          if (seen[id]) fail('ข้อคำถามรหัส ' + id + ' ซ้ำกัน');
+          seen[id] = 1;
+          var label = clip(x.label, 600).replace(/\s+/g, ' ');
+          if (label.length < 2) fail('กรุณากรอกข้อความของข้อคำถามลำดับที่ ' + (i + 1));
+          if (old && isSection(old)) {
+            // หัวข้อหลัก 1–3: แก้ถ้อยคำได้อย่างเดียว
+            if (x.retired) fail('ยกเลิกใช้หัวข้อหลักไม่ได้: ' + clip(old.label, 40));
+            sec = old.section;
+            var s0 = Object.assign({}, old, { label: label, printLabel: label === old.label ? old.printLabel : label, retired: false });
+            if (label !== old.label) log.edit.push(itemName(s0));
+            out.push(s0); return;
+          }
+          if (!old && i === 0) fail('ข้อแรกต้องเป็นหัวข้อหลัก');
+          var type = ITEM_TYPES[x.type] ? x.type : 'num';
+          if (type === 'header' && Number(x.level) === 0) fail('เพิ่มหัวข้อหลักใหม่ไม่ได้ (ข้อ 4 และ 5 เป็นส่วนคงที่ของแบบรายงาน)');
+          var used = old ? usage[old.id] || 0 : 0, core = old && CORE_IDS.indexOf(old.id) >= 0;
+          var unit = type === 'num' ? clip(x.unit, 30) : '', agg = type === 'num' && x.agg === 'latest' ? 'latest' : 'sum';
+          if (type === 'num' && !unit) fail('กรุณาระบุหน่วยนับของ ' + itemName({ code: x.code, label: label }));
+          if (old && (used || core)) {
+            var why = core ? 'เป็นตัวชี้วัดหลักของระบบ' : 'มีข้อมูลแล้ว ' + used + ' รายงาน';
+            if (type !== old.type) fail(itemName(old) + ' ' + why + ' — เปลี่ยนรูปแบบคำตอบไม่ได้ (ให้เพิ่มเป็นข้อใหม่แทน)');
+            if (type === 'num' && unit !== old.unit) fail(itemName(old) + ' ' + why + ' — เปลี่ยนหน่วยนับไม่ได้ (ให้เพิ่มเป็นข้อใหม่แทน)');
+            if (agg !== old.agg) fail(itemName(old) + ' ' + why + ' — เปลี่ยนวิธีนับยอดสะสมไม่ได้');
+          }
+          if (core && x.retired) fail(itemName(old) + ' เป็นตัวชี้วัดหลักของระบบ — ยกเลิกใช้ไม่ได้');
+          var level = Number(x.level) === 1 ? 1 : 2;
+          var print = type === 'header' ? (x.print === 'gray' ? 'gray' : 'band') : type === 'check' ? 'gray' : '';
+          var dash = old ? /^-\s/.test(old.printLabel) : level === 2 && type !== 'header';
+          var it = {
+            id: id, section: sec, code: clip(x.code, 12), label: label,
+            printLabel: old && label === old.label ? old.printLabel : (dash ? '- ' : '') + label,
+            unit: unit, type: type, agg: agg, level: level, print: print,
+            row: old ? old.row : null, h: old ? old.h : 24.75, retired: !!x.retired
+          };
+          if (!it.code) fail('กรุณาระบุเลขข้อของ ' + itemName(it));
+          if (!old) log.add.push(itemName(it));
+          else {
+            if (it.retired && !old.retired) log.retire.push(itemName(it));
+            else if (!it.retired && old.retired) log.restore.push(itemName(it));
+            if (label !== old.label || it.code !== old.code || unit !== old.unit || type !== old.type || level !== old.level || print !== old.print || agg !== old.agg) log.edit.push(itemName(it));
+          }
+          out.push(it);
+        });
+        items.forEach(function (it) {
+          if (seen[it.id]) return;
+          if (isSection(it)) fail('ลบหัวข้อหลักไม่ได้: ' + clip(it.label, 40));
+          if (CORE_IDS.indexOf(it.id) >= 0) fail(itemName(it) + ' เป็นตัวชี้วัดหลักของระบบ — ลบไม่ได้');
+          if (usage[it.id]) fail('ลบ' + itemName(it) + ' ไม่ได้ เพราะมีข้อมูลแล้ว ' + usage[it.id] + ' รายงาน — ใช้ "ยกเลิกใช้" แทน (ตัวเลขเดิมยังนับในยอดสะสม)');
+          log.del.push(itemName(it));
+        });
+        if (!out.some(function (it) { return !it.retired && it.type !== 'header'; })) fail('ต้องมีข้อคำถามที่ใช้งานอย่างน้อย 1 ข้อ');
+        var now = store.now();
+        replaceTable(T.ITEMS, out.map(function (it, i) { return itemToRow(it, i, now, str(u.name)); }));
+        refreshItems();
+        var moved = out.map(function (x) { return x.id; }).filter(function (id) { return cur[id]; }).join(',') !== oldOrder.split(',').filter(function (id) { return seen[id]; }).join(',');
+        var parts = [];
+        [['add', 'เพิ่ม'], ['edit', 'แก้ไข'], ['retire', 'ยกเลิกใช้'], ['restore', 'นำกลับมาใช้'], ['del', 'ลบ']].forEach(function (k) {
+          if (log[k[0]].length) parts.push(k[1] + ' ' + log[k[0]].length + ' ข้อ: ' + log[k[0]].slice(0, 4).join(', ') + (log[k[0]].length > 4 ? ' …' : ''));
+        });
+        if (moved) parts.push('จัดลำดับใหม่');
+        audit(u, 'items_update', parts.join(' · ') || 'บันทึก (ไม่มีการเปลี่ยนแปลง)', p._ua);
+        return itemsPayload();
+      });
+    };
+
+    A['admin.items.reset'] = function (p, u) {
+      need(u, ['super']);
+      return store.lock(function () {
+        refreshItems();
+        var usage = itemUsage(), baseIds = {}, out = [];
+        BASE.forEach(function (b) { baseIds[b.id] = 1; });
+        // ข้อที่เพิ่มเองและมีข้อมูลแล้ว คงไว้แบบ "ยกเลิกใช้" ต่อจากข้อเดิมที่อยู่ก่อนหน้า เพื่อไม่ให้ตัวเลขหายจากยอดสะสม
+        var keep = {}, prev = BASE[0].id;
+        items.forEach(function (it) { if (baseIds[it.id]) prev = it.id; else if (usage[it.id]) (keep[prev] = keep[prev] || []).push(it); });
+        BASE.forEach(function (b) {
+          out.push(b);
+          (keep[b.id] || []).forEach(function (it) { out.push(Object.assign({}, it, { retired: true, section: b.section })); });
+        });
+        var kept = Object.keys(keep).reduce(function (n, k) { return n + keep[k].length; }, 0);
+        if (kept) { var now = store.now(); replaceTable(T.ITEMS, out.map(function (it, i) { return itemToRow(it, i, now, str(u.name)); })); }
+        else replaceTable(T.ITEMS, []);
+        refreshItems();
+        audit(u, 'items_reset', 'คืนค่าแบบฟอร์มต้นฉบับ' + (kept ? ' (คงข้อที่เพิ่มเองซึ่งมีข้อมูลแล้ว ' + kept + ' ข้อ ไว้แบบยกเลิกใช้)' : ''), p._ua);
+        return itemsPayload();
+      });
+    };
+
     /* ═════════ Data API v1 (อ่านอย่างเดียว สำหรับ Dashboard ภายนอก) ═════════
      * GET <WEB_APP_URL>?api=v1&endpoint=summary&key=...&round=3&items=agri&format=json|csv&callback=fn
      * ข้อมูล = ยอดรวมของรายงานที่ "ส่งแล้ว/ตรวจรับแล้ว" เท่านั้น ไม่มีข้อมูลส่วนบุคคล
@@ -593,7 +750,7 @@ var AGServer = (function () {
       return out;
     }
     function itemInfo(it) {
-      return { id: it.id, code: it.code, section: it.section, label: it.label, unit: it.unit, type: it.type, aggregation: it.agg, agri: AGRI_IDS.indexOf(it.id) >= 0 };
+      return { id: it.id, code: it.code, section: it.section, label: it.label, unit: it.unit, type: it.type, aggregation: it.agg, agri: AGRI_IDS.indexOf(it.id) >= 0, retired: !!it.retired };
     }
     function roundInfo(r) { return r ? { round: r.round, label: r.label, start: r.start, end: r.end, due: r.due } : null; }
     function nv(x) { return x === undefined ? null : x; }
@@ -605,7 +762,7 @@ var AGServer = (function () {
           site: s.SITE_NAME, province: s.PROVINCE, office: s.OFFICE, title: s.TITLE, season: s.SEASON,
           current_round: ctx.cur, rounds: ctx.rounds.map(roundInfo), districts: ctx.districts,
           items: items.filter(function (it) { return it.type !== 'header'; }).map(itemInfo),
-          endpoints: API_ENDPOINTS, counted_status: ['submitted', 'accepted']
+          endpoints: API_ENDPOINTS, counted_status: ['submitted', 'accepted'], form_customized: customItems
         };
       },
       summary: function (ctx) {
@@ -683,8 +840,8 @@ var AGServer = (function () {
         rows.push(['district_code', 'district_name', 'round', 'status', 'late', 'submitted_at']);
         data.districts.forEach(function (d) { Object.keys(d.rounds).forEach(function (r) { var x = d.rounds[r]; rows.push([d.code, d.name, r, x.status, x.late, x.submitted_at]); }); });
       } else {
-        rows.push(['item_id', 'code', 'section', 'label', 'unit', 'type', 'aggregation', 'agri']);
-        data.items.forEach(function (x) { rows.push([x.id, x.code, x.section, x.label, x.unit, x.type, x.aggregation, x.agri]); });
+        rows.push(['item_id', 'code', 'section', 'label', 'unit', 'type', 'aggregation', 'agri', 'retired']);
+        data.items.forEach(function (x) { rows.push([x.id, x.code, x.section, x.label, x.unit, x.type, x.aggregation, x.agri, x.retired]); });
       }
       return '﻿' + rows.map(function (r) { return r.map(function (c) { c = c === null || c === undefined ? '' : String(c); return /[",\n]/.test(c) ? '"' + c.replace(/"/g, '""') + '"' : c; }).join(','); }).join('\r\n');
     }
@@ -692,6 +849,7 @@ var AGServer = (function () {
     /** เรียก Data API: คืน { body: object|string, csv: bool } */
     function api(p) {
       p = p || {};
+      refreshItems();
       var s = settings();
       if (!truthy(s.API_ENABLED)) apiFail('api_disabled', 'Data API ปิดใช้งานอยู่');
       var endpoint = str(p.endpoint || 'summary').toLowerCase();
@@ -746,13 +904,15 @@ var AGServer = (function () {
       payload = payload || {};
       var fn = A[action];
       if (!fn) fail('ไม่รู้จักคำสั่ง: ' + action);
+      refreshItems();
       if (OPEN[action]) return fn(payload, null);
       var u = auth(payload.token);
       var res = fn(payload, u);
       if (WRITES[action]) bump();
       return res;
     }
-    var WRITES = { 'data.save': 1, 'data.withdraw': 1, 'data.review': 1, 'admin.rounds.save': 1, 'admin.rounds.generate': 1, 'admin.settings.save': 1 };
+    var WRITES = { 'data.save': 1, 'data.withdraw': 1, 'data.review': 1, 'admin.rounds.save': 1, 'admin.rounds.generate': 1, 'admin.settings.save': 1,
+      'admin.items.save': 1, 'admin.items.reset': 1 };
 
     /** สร้างโครงสร้างตารางและข้อมูลตั้งต้น (เรียกจาก setup) */
     function seed(opts) {
@@ -797,11 +957,15 @@ var AGServer = (function () {
       return rounds();
     };
 
-    return { handle: handle, api: api, seed: seed, actions: A, settings: settings, records: records, dataColumns: function () { return dataColumns(items); } };
+    refreshItems();
+    return { handle: handle, api: api, seed: seed, actions: A, settings: settings,
+      records: function () { refreshItems(); return records(); },
+      items: function () { return refreshItems(); },
+      dataColumns: function () { return dataColumns(refreshItems()); } };
   }
 
   return { create: create, COLS: COLS, T: T, DEFAULT_SETTINGS: DEFAULT_SETTINGS, ROLE_TH: ROLE_TH, dataColumns: dataColumns,
-    rowToRecord: rowToRecord, recordToRow: recordToRow, normPhone: normPhone };
+    rowToRecord: rowToRecord, recordToRow: recordToRow, normPhone: normPhone, CORE_IDS: CORE_IDS };
 })();
 
 if (typeof module !== 'undefined' && module.exports) module.exports = AGServer;

@@ -2,9 +2,9 @@
  * KPP Smart Agri-Materials — Backend (Google Apps Script + Google Sheets)
  * ระบบรายงานการจัดการเศษวัสดุทางการเกษตร แบบสะสมรายสัปดาห์ จังหวัดกำแพงเพชร
  *
- * ไฟล์ในโปรเจกต์ Apps Script
- *   Code.gs  — ไฟล์นี้: เชื่อม Google Sheets (SheetStore), Web API, setup
- *   Lib.gs   — รายการตัวชี้วัด + ตรรกะยอดสะสม + กฎของระบบ (สร้างจาก docs/assets/js ด้วย tools/build-gs.js)
+ * ไฟล์ต้นฉบับนี้: เชื่อม Google Sheets (SheetStore), Web API, setup
+ * ติดตั้งในโปรเจกต์ Apps Script: ใช้ไฟล์ apps-script/KPP-AllInOne.gs ไฟล์เดียว
+ *   (= ไฟล์นี้ + รายการตัวชี้วัด/ตรรกะยอดสะสม/กฎของระบบจาก docs/assets/js — สร้างด้วย node tools/build-gs.js)
  *
  * การทำให้ใช้งานได้: Deploy → New deployment → Web app → Execute as: Me → Who has access: Anyone
  */
@@ -140,6 +140,15 @@ SheetStore_.prototype.remove = function (name, pred) {
   delete this.tables[name];
   return hit.length;
 };
+/** เขียนทับทั้งตารางในครั้งเดียว (เร็วกว่าลบ/เพิ่มทีละแถว) */
+SheetStore_.prototype.replaceAll = function (name, rows) {
+  var t = this.table_(name), self = this;
+  (rows || []).forEach(function (r) { self.ensureCols_(t, r); });
+  var lr = t.sh.getLastRow();
+  if (lr > 1) t.sh.getRange(2, 1, lr - 1, Math.max(t.header.length, 1)).clearContent();
+  if (rows && rows.length) t.sh.getRange(2, 1, rows.length, t.header.length).setValues(rows.map(function (r) { return self.toRow_(t, r); }));
+  delete this.tables[name];
+};
 SheetStore_.prototype.now = function () { return Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd HH:mm:ss'); };
 SheetStore_.prototype.today = function () { return Utilities.formatDate(new Date(), 'Asia/Bangkok', 'yyyy-MM-dd'); };
 SheetStore_.prototype.sha256 = function (s) { return hex_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, s, Utilities.Charset.UTF_8)); };
@@ -177,6 +186,7 @@ function setup() {
   defs[T.DATA] = AGServer.dataColumns(AG_ITEMS);
   defs[T.LOG] = cols.AccessLog;
   defs[T.APIKEYS] = cols.ApiKeys;
+  defs[T.ITEMS] = cols.Items;
   Object.keys(defs).forEach(function (name) {
     var sh = ss.getSheetByName(name) || ss.insertSheet(name);
     var lc = sh.getLastColumn();
@@ -191,6 +201,7 @@ function setup() {
   ss.getSheetByName(T.ROUNDS).getRange('B:E').setNumberFormat('@');
   ss.getSheetByName(T.LOG).getRange('A:I').setNumberFormat('@');
   ss.getSheetByName(T.APIKEYS).getRange('A:H').setNumberFormat('@');
+  ss.getSheetByName(T.ITEMS).getRange('A:P').setNumberFormat('@');
   ss.getSheetByName(T.DATA).getRange(1, 1, ss.getSheetByName(T.DATA).getMaxRows(), AGServer.COLS.DataMeta.length).setNumberFormat('@');
   ss.getSheetByName(T.DATA).setFrozenColumns(3);
   ss.getSheetByName(T.SETTINGS).getRange('B:B').setNumberFormat('@');
@@ -214,12 +225,13 @@ function writeProvinceSummary(round) {
   var store = new SheetStore_();
   var server = AGServer.create(store, AG_ITEMS);
   var boot = server.handle('public.bootstrap', {});
-  var p = AGCore.computeProvince(AG_ITEMS, server.records(), boot.districts, round);
+  var items = server.items(); // แบบฟอร์มปัจจุบัน (รวมข้อที่ Super Admin แก้ไข)
+  var p = AGCore.computeProvince(items, server.records(), boot.districts, round);
   var ss = ss_(), sh = ss.getSheetByName('สรุปจังหวัด') || ss.insertSheet('สรุปจังหวัด');
   sh.clear();
   var head = ['ข้อ', 'มาตรการ', 'หน่วยนับ', 'รวม (ครั้งนี้)', 'รวมสะสม'].concat(boot.districts.map(function (d) { return d.name; }));
   var out = [head];
-  AG_ITEMS.forEach(function (it) {
+  AGCore.shownItems(items, p).forEach(function (it) {
     if (it.type === 'header') { out.push([it.code, it.printLabel].concat(new Array(head.length - 2).fill(''))); return; }
     var x = p.items[it.id];
     out.push([it.code, it.printLabel, x.unit, x.week === null ? '' : x.week, x.cum === null ? '' : x.cum]

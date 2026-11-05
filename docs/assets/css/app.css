@@ -392,3 +392,26 @@ body:not(.public) .demo-bar { display: none; }
   .review-item .c { text-align: left; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ── แบบฟอร์มรายงาน (Super Admin แก้ไขข้อคำถาม) ── */
+.fe-list { display: grid; }
+.fe-row { display: grid; grid-template-columns: 58px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 9px 14px; border-top: 1px solid var(--border-light); }
+.fe-row:first-child { border-top: 0; }
+.fe-row.sec { background: #dafbe1; font-weight: 600; }
+.fe-row.hd { background: #f6f8fa; }
+.fe-row.l2 .fe-lbl { padding-left: 18px; }
+.fe-row.retired .fe-lbl, .fe-row.retired .fe-code { opacity: .55; text-decoration: line-through; }
+.fe-row.changed { box-shadow: inset 3px 0 0 var(--accent); }
+.fe-row.new { box-shadow: inset 3px 0 0 var(--primary); }
+.fe-code { font: 600 13px/1 var(--display); color: var(--muted); }
+.fe-lbl { min-width: 0; font-size: 14px; line-height: 1.45; }
+.fe-meta { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 3px; }
+.fe-meta .chip { font-size: 11px; padding: 1px 7px; font-weight: 500; }
+.fe-act { display: flex; gap: 2px; }
+.fe-act .icon-btn:disabled { opacity: .3; cursor: default; }
+.fe-use { font-size: 12px; color: var(--muted); white-space: nowrap; text-align: right; }
+@media (max-width: 720px) {
+  .fe-row { grid-template-columns: 44px minmax(0, 1fr); }
+  .fe-use { grid-column: 2; text-align: left; }
+  .fe-act { grid-column: 1 / -1; justify-content: flex-end; }
+}

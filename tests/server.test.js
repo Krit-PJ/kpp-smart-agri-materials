@@ -236,3 +236,70 @@ const logs2 = call('admin.logs', { token: ST2 }).map(l => l.action);
 assert(logs2.includes('apikey_create') && logs2.includes('apikey_revoke'));
 console.log('✓ settings toggle + Data API tests passed');
 
+
+// ═════════ แบบฟอร์มรายงาน: Super Admin แก้ไขข้อคำถาม ═════════
+err('admin.items.get', { token: MT2 }, /ไม่มีสิทธิ์/);
+err('admin.items.save', { token: A1, items: [] }, /ไม่มีสิทธิ์/);
+call('data.save', { token: ST2, round: 1, district: 'D05', mode: 'submit', values: { R13: { v: 3 } } });
+let F = call('admin.items.get', { token: ST2 });
+assert.strictEqual(F.custom, false); assert.strictEqual(F.items.length, AG_ITEMS.length);
+assert.strictEqual(call('public.bootstrap').items, null, 'ยังไม่แก้ไข = ใช้แบบฟอร์มต้นฉบับ');
+const used = Object.keys(F.usage).filter(id => F.core.indexOf(id) < 0)[0];
+assert(used, 'มีข้อที่มีข้อมูล (ไม่ใช่ข้อหลัก)');
+const edit = fn => { const l = JSON.parse(JSON.stringify(F.items)); fn(l); return l; };
+// ข้อหลัก 2.2: แก้ถ้อยคำได้ เปลี่ยนหน่วย/ลบ/ยกเลิกใช้ไม่ได้
+err('admin.items.save', { token: ST2, items: edit(l => { l.find(i => i.id === 'R31').unit = 'ตัน'; }) }, /เปลี่ยนหน่วยนับไม่ได้/);
+err('admin.items.save', { token: ST2, items: edit(l => { l.splice(l.findIndex(i => i.id === 'R29'), 1); }) }, /ลบไม่ได้/);
+err('admin.items.save', { token: ST2, items: edit(l => { l.find(i => i.id === 'R30').retired = true; }) }, /ยกเลิกใช้ไม่ได้/);
+err('admin.items.save', { token: ST2, items: edit(l => { l.splice(l.findIndex(i => i.id === used), 1); }) }, /มีข้อมูลแล้ว/);
+err('admin.items.save', { token: ST2, items: edit(l => { l.find(i => i.id === used).type = 'check'; }) }, /เปลี่ยนรูปแบบคำตอบไม่ได้/);
+err('admin.items.save', { token: ST2, items: edit(l => { l.splice(0, 1); }) }, /หัวข้อหลัก/);
+err('admin.items.save', { token: ST2, items: edit(l => { l.splice(5, 0, { label: 'ใหม่', type: 'num', code: '1.1', level: 2 }); }) }, /หน่วยนับ/);
+F = call('admin.items.save', { token: ST2, items: edit(l => {
+  l.find(i => i.id === 'R31').label = 'ไถกลบตอซัง/ใช้สารย่อยสลาย (แก้ถ้อยคำ)';
+  l.splice(l.findIndex(i => i.id === 'R32') + 1, 0, { label: 'อัดฟางก้อนจำหน่าย', type: 'num', unit: 'ตัน', code: '2.2', level: 2 });
+  l.find(i => i.id === 'R27').retired = true;
+  l.splice(l.findIndex(i => i.id === 'R9'), 1);
+}) });
+assert.strictEqual(F.custom, true);
+const n1 = F.items.find(i => i.id === 'N1');
+assert(n1 && n1.section === '2' && n1.printLabel === '- อัดฟางก้อนจำหน่าย' && n1.print === '' && n1.row === null);
+assert.strictEqual(F.items.findIndex(i => i.id === 'N1'), F.items.findIndex(i => i.id === 'R32') + 1);
+assert(!F.items.some(i => i.id === 'R9') && F.items.find(i => i.id === 'R27').retired);
+assert(F.items.find(i => i.id === 'R31').label.includes('แก้ถ้อยคำ'));
+const b2 = call('public.bootstrap');
+assert(b2.items && b2.items.length === AG_ITEMS.length, 'bootstrap ส่งแบบฟอร์มที่แก้ไขแล้ว');
+assert(call('admin.logs', { token: ST2 }).some(l => l.action === 'items_update' && /เพิ่ม 1 ข้อ/.test(l.detail) && /ยกเลิกใช้ 1 ข้อ/.test(l.detail) && /ลบ 1 ข้อ/.test(l.detail)));
+// กรอกข้อใหม่ได้ และนับยอดสะสม
+call('data.save', { token: ST2, round: 1, district: 'D02', mode: 'submit', values: { N1: { v: 12.5 }, R31: { v: 10 } } });
+call('data.save', { token: ST2, round: 2, district: 'D02', mode: 'submit', values: { N1: { v: 2 } } });
+const recsN = call('data.records', { token: ST2 });
+const pN = AGCore.computeProvince(b2.items, recsN, boot.districts, 2);
+assert.strictEqual(pN.items.N1.cum, 14.5);
+assert(store.rows('Data')[0].hasOwnProperty('N1_v') || store.rows('Data').some(r => 'N1_v' in r), 'มีคอลัมน์ข้อใหม่ในชีต Data');
+// ข้อใหม่ที่มีข้อมูลแล้ว: เปลี่ยนหน่วย/ลบไม่ได้, ยกเลิกใช้ได้ และยังแสดงในรายงานที่มีตัวเลข
+F = call('admin.items.get', { token: ST2 });
+assert.strictEqual(F.usage.N1, 2);
+err('admin.items.save', { token: ST2, items: edit(l => { l.find(i => i.id === 'N1').unit = 'ก้อน'; }) }, /เปลี่ยนหน่วยนับไม่ได้/);
+err('admin.items.save', { token: ST2, items: edit(l => { l.splice(l.findIndex(i => i.id === 'N1'), 1); }) }, /ใช้ "ยกเลิกใช้" แทน/);
+F = call('admin.items.save', { token: ST2, items: edit(l => { l.find(i => i.id === 'N1').retired = true; }) });
+const itemsR = call('public.bootstrap').items;
+assert(AGCore.shownItems(itemsR, AGCore.computeProvince(itemsR, recsN, boot.districts, 2)).some(i => i.id === 'N1'), 'ข้อยกเลิกใช้ที่มีข้อมูลยังแสดงในรายงาน');
+assert(!AGCore.shownItems(itemsR).some(i => i.id === 'N1'), 'แบบฟอร์มกรอกไม่แสดงข้อที่ยกเลิกใช้');
+assert(!AGCore.shownItems(itemsR, AGCore.computeProvince(itemsR, recsN, boot.districts, 2)).some(i => i.id === 'R27'), 'ข้อยกเลิกใช้ที่ไม่มีข้อมูลไม่แสดง');
+assert.strictEqual(AGCore.computeProvince(itemsR, recsN, boot.districts, 2).items.N1.cum, 14.5, 'ยกเลิกใช้แล้วตัวเลขเดิมยังนับ');
+// ส่งข้อมูลซ้ำ: ค่าของข้อที่ยกเลิกใช้ยังเก็บไว้
+call('data.save', { token: ST2, round: 2, district: 'D02', mode: 'submit', values: { N1: { v: 2 }, R31: { v: 3 } } });
+// Data API: แสดงข้อใหม่และสถานะยกเลิกใช้
+const key2 = call('admin.apikeys.create', { token: ST2, label: 'ทดสอบแบบฟอร์ม' });
+r = S.api({ endpoint: 'meta', key: key2.key });
+assert(r.body.data.form_customized && r.body.data.items.find(i => i.id === 'N1').retired === true);
+assert.strictEqual(S.api({ endpoint: 'summary', key: key2.key, round: 2, items: 'N1' }).body.data.items[0].cumulative, 14.5);
+// คืนค่าต้นฉบับ: คงข้อที่เพิ่มเองซึ่งมีข้อมูลไว้แบบยกเลิกใช้
+F = call('admin.items.reset', { token: ST2 });
+assert(F.items.some(i => i.id === 'R9') && !F.items.find(i => i.id === 'R27').retired);
+assert(F.items.find(i => i.id === 'N1').retired && F.items.findIndex(i => i.id === 'N1') === F.items.findIndex(i => i.id === 'R32') + 1);
+assert.strictEqual(F.items.find(i => i.id === 'R31').label, AG_ITEMS.find(i => i.id === 'R31').label);
+assert(call('admin.logs', { token: ST2 }).some(l => l.action === 'items_reset'));
+console.log('✓ editable form items tests passed');
+

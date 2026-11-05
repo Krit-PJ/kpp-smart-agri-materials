@@ -1,7 +1,7 @@
 /* หน้าสถานะการส่งรายงาน + ตรวจรับ/ส่งกลับแก้ไข (จังหวัด) */
 (function () {
   var ST = { r: null };
-  function itemOf(id) { return AG_ITEMS.filter(function (i) { return i.id === id; })[0]; }
+  var itemOf = U.item;
 
   Pages.status = {
     title: 'สถานะการส่งรายงาน', sub: 'ติดตามการส่งรายงานของ 11 อำเภอ',
@@ -108,7 +108,7 @@
     if (!rec) return;
     var comp = AGCore.computeDistrict(AG_ITEMS, S.records, code, ST.r, { includeCurrent: true });
     var rows = [];
-    AG_ITEMS.forEach(function (it) {
+    AGCore.shownItems(AG_ITEMS, comp).forEach(function (it) {
       if (it.type === 'header') return;
       var c = rec.values[it.id]; if (!c) return;
       var x = comp.items[it.id], v = AGCore.num(c.v);

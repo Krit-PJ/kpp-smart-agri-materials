@@ -35,17 +35,16 @@ var KPPPrint = (function () {
       '<div class="ph ph34" style="height:29.2pt"><div>' + pm(h.ref1) + '</div><div>' + pm(h.ref2) + '</div></div>';
 
     // จัดกลุ่มแถวตามข้อ (สำหรับรวมช่อง "ที่")
-    var items = o.items;
+    var items = o.items, split = splitIndex(items);
     function groupSpan(idx) {
       var it = items[idx], k = 1;
-      while (items[idx + k] && items[idx + k].code === it.code && items[idx + k].print !== 'section' && items[idx + k].row !== SPLIT_ROW) k++;
+      while (items[idx + k] && items[idx + k].code === it.code && items[idx + k].print !== 'section' && idx + k !== split) k++;
       return k;
     }
     function rowsHtml(from, to) {
-      var out = [], i = 0;
-      while (i < items.length) {
+      var out = [], i = from;
+      while (i < to) {
         var it = items[i];
-        if (it.row < from || it.row >= to) { i++; continue; }
         if (it.print === 'section') { out.push('<tr class="s"' + rh(it.row) + '><td colspan="9"' + ed + '>' + pm(it.printLabel) + '</td></tr>'); i++; continue; }
         var span = groupSpan(i);
         for (var k = 0; k < span; k++) out.push(rowHtml(items[i + k], k === 0 ? span : 0));
@@ -102,11 +101,18 @@ var KPPPrint = (function () {
       '<div class="pf-note"><div>หมายเหตุ</div><div style="padding-left:1.4mm"' + ed + '>' + esc(o.qr.note) + '</div>' +
       (o.qr.img ? '<img class="qr" src="' + esc(o.qr.img) + '" alt="QR Code">' : '') + '<div class="lnk"' + ed + '>' + esc(o.qr.link) + '</div></div>';
 
-    var p1 = '<div class="sheet ' + (o.paper || 'a4') + '"><div class="sheet-inner">' + header + '<table class="pf">' + colg + thead + '<tbody>' + rowsHtml(0, SPLIT_ROW) + '</tbody></table></div></div>';
-    var p2 = '<div class="sheet ' + (o.paper || 'a4') + '"><div class="sheet-inner">' + header + '<table class="pf">' + colg + thead + '<tbody>' + rowsHtml(SPLIT_ROW, 999) +
+    var p1 = '<div class="sheet ' + (o.paper || 'a4') + '"><div class="sheet-inner">' + header + '<table class="pf">' + colg + thead + '<tbody>' + rowsHtml(0, split) + '</tbody></table></div></div>';
+    var p2 = '<div class="sheet ' + (o.paper || 'a4') + '"><div class="sheet-inner">' + header + '<table class="pf">' + colg + thead + '<tbody>' + rowsHtml(split, items.length) +
       '<tr class="s"' + rh('sec') + '><td colspan="9"' + ed + '>4. การดำเนินการอื่น ๆ ที่เกี่ยวข้องในการป้องกันและแก้ไขปัญหาไฟป่า หมอกควัน และฝุ่นละอองขนาดเล็ก (PM<sub>2.5</sub>) (ถ้ามี)</td></tr>' + r4.join('') +
       '<tr class="s"' + rh('sec') + '><td colspan="9"' + ed + '>5. ปัญหาอุปสรรค หรือข้อเสนอแนะ ในการดำเนินงาน (ถ้ามี)</td></tr>' + r5.join('') + '</tbody></table>' + foot + '</div></div>';
     return p1 + p2;
+  }
+  /** ตำแหน่งขึ้นหน้า 2: ข้อ 3.2 ตามแบบฟอร์มต้นฉบับ (ถ้าข้อนั้นถูกยกเลิกใช้ ใช้ข้อแรกของหมวด 3 ที่ไม่ใช่ 3.1) */
+  function splitIndex(items) {
+    var i;
+    for (i = 0; i < items.length; i++) if (items[i].row === SPLIT_ROW) return i;
+    for (i = 0; i < items.length; i++) if (items[i].section === '3' && items[i].print !== 'section' && items[i].code && items[i].code !== '3.1') return i;
+    return items.length;
   }
   function stripPrefix(s) { return String(s || '').replace(/^(นาย|นางสาว|นาง|น\.ส\.)\s*/, ''); }
 
@@ -146,6 +152,7 @@ var KPPPrint = (function () {
       P = {
         scope: scope, r: r, paper: (P && P.paper) || 'a4', zero: P ? P.zero : false, draft: P ? P.draft : (S.user.role === 'district'),
         season: s.SEASON, title: s.TITLE, ref1: s.DOC_REF_1, ref2: s.DOC_REF_2,
+        office: scope === 'province' ? s.OFFICE : 'สำนักงานเกษตรอำเภอ' + S.districtName(scope),
         roundNo: r, start: rd.start || '', end: rd.end || '',
         qrImg: S.qrImage(), qrNote: s.QR_NOTE, qrLink: s.QR_LINK,
         signName: scope === 'province' ? s.PROV_REPORTER_NAME : '', signTitle: scope === 'province' ? s.PROV_REPORTER_TITLE : ''
@@ -161,7 +168,7 @@ var KPPPrint = (function () {
     }
   };
 
-  function office() { return P.scope === 'province' ? S.settings.OFFICE : 'สำนักงานเกษตรอำเภอ' + S.districtName(P.scope); }
+  function office() { return P.office; }
 
   function layout(view) {
     var admin = S.isAdmin();
@@ -173,7 +180,9 @@ var KPPPrint = (function () {
       '<label class="fld"><span>รายงาน</span>' + scopeSel + '</label>' +
       '<label class="fld"><span>ครั้งที่สรุปผลรายงาน (รายสัปดาห์)</span><select id="pRound">' + S.roundOptions(P.r) + '</select></label>' +
       '<div class="nav-group" style="color:var(--muted);padding:6px 0 0">หัวรายงาน (แก้ไขได้)</div>' +
-      '<label class="fld"><span>ปี</span><input id="pSeason" value="' + U.esc(P.season) + '" placeholder="2568 - 2569"></label>' +
+      '<label class="fld"><span>ชื่อแบบรายงาน</span><textarea id="pTitle" rows="2">' + U.esc(P.title) + '</textarea></label>' +
+      '<div class="grid3" style="grid-template-columns:1fr 1.4fr;gap:8px"><label class="fld"><span>ปี</span><input id="pSeason" value="' + U.esc(P.season) + '" placeholder="2568 - 2569"></label>' +
+      '<label class="fld"><span>หน่วยงาน</span><input id="pOffice" value="' + U.esc(P.office) + '"></label></div>' +
       '<div class="grid3" style="grid-template-columns:70px 1fr 1fr;gap:8px"><label class="fld"><span>ครั้งที่</span><input id="pNo" inputmode="numeric" value="' + U.esc(P.roundNo) + '"></label>' +
       '<label class="fld"><span>ระหว่างวันที่</span><input id="pStart" type="date" value="' + U.esc(P.start) + '"></label>' +
       '<label class="fld"><span>ถึงวันที่</span><input id="pEnd" type="date" value="' + U.esc(P.end) + '"></label></div>' +
@@ -208,9 +217,9 @@ var KPPPrint = (function () {
   }
 
   function paint() {
-    var pages = U.$('pPages');
+    var pages = U.$('pPages'), comp = compute();
     pages.innerHTML = KPPPrint.build({
-      scope: P.scope === 'province' ? 'province' : 'district', comp: compute(), items: AG_ITEMS, editable: true, zeroWeek: P.zero, paper: P.paper,
+      scope: P.scope === 'province' ? 'province' : 'district', comp: comp, items: AGCore.shownItems(AG_ITEMS, comp), editable: true, zeroWeek: P.zero, paper: P.paper,
       head: { title: P.title, season: P.season, office: office(), roundNo: P.roundNo, start: P.start, end: P.end, ref1: P.ref1, ref2: P.ref2 },
       sign: { name: P.signName, title: P.signTitle }, qr: { img: P.qrImg, note: P.qrNote, link: P.qrLink }
     });
@@ -230,7 +239,7 @@ var KPPPrint = (function () {
     var sc = U.$('pScope');
     if (sc) sc.onchange = function () { App.go('print', { scope: sc.value, r: P.r }); };
     U.$('pRound').onchange = function (e) { App.go('print', { scope: P.scope, r: e.target.value }); };
-    var map = { pSeason: 'season', pNo: 'roundNo', pStart: 'start', pEnd: 'end', pRef1: 'ref1', pRef2: 'ref2', pSign: 'signName', pSignT: 'signTitle', pQrNote: 'qrNote', pQrLink: 'qrLink' };
+    var map = { pTitle: 'title', pOffice: 'office', pSeason: 'season', pNo: 'roundNo', pStart: 'start', pEnd: 'end', pRef1: 'ref1', pRef2: 'ref2', pSign: 'signName', pSignT: 'signTitle', pQrNote: 'qrNote', pQrLink: 'qrLink' };
     var repaint = U.debounce(paint, 250);
     Object.keys(map).forEach(function (id) { U.$(id).addEventListener('input', function (e) { P[map[id]] = e.target.value; repaint(); }); });
     U.$('pZero').onchange = function (e) { P.zero = e.target.checked; paint(); };
@@ -255,8 +264,9 @@ var KPPPrint = (function () {
     U.$('pXlsx').onclick = function () { Exporter.xlsx(P.scope === 'province' ? 'province' : 'district', P.r, P.scope === 'province' ? null : P.scope, P); };
     var sv = U.$('pSave');
     if (sv) sv.onclick = function () {
-      var vals = { SEASON: P.season, DOC_REF_1: P.ref1, DOC_REF_2: P.ref2, QR_NOTE: P.qrNote, QR_LINK: P.qrLink, QR_IMAGE: /^data:/.test(P.qrImg) ? P.qrImg : '' };
-      if (P.scope === 'province') { vals.PROV_REPORTER_NAME = P.signName; vals.PROV_REPORTER_TITLE = P.signTitle; }
+      var vals = { TITLE: P.title, SEASON: P.season, DOC_REF_1: P.ref1, DOC_REF_2: P.ref2, QR_NOTE: P.qrNote, QR_LINK: P.qrLink, QR_IMAGE: /^data:/.test(P.qrImg) ? P.qrImg : '' };
+      // ชื่อหน่วยงานและผู้รายงานระดับจังหวัด บันทึกเมื่อพิมพ์รายงานระดับจังหวัด (รายงานอำเภอใช้ชื่ออำเภอ/ผู้ส่งรายงาน)
+      if (P.scope === 'province') { vals.OFFICE = P.office; vals.PROV_REPORTER_NAME = P.signName; vals.PROV_REPORTER_TITLE = P.signTitle; }
       var rd = S.roundOf(P.r), jobs = [S.call('admin.settings.save', { values: vals })];
       var datesChanged = rd && (rd.start !== P.start || rd.end !== P.end) && P.start && P.end;
       if (datesChanged) jobs.push(S.call('admin.rounds.save', { rounds: [{ round: rd.round, label: rd.label, start: P.start, end: P.end, due: rd.due, open: rd.open }] }));

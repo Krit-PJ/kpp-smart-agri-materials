@@ -9,7 +9,7 @@
   var RAMP = ['#d8f3df', '#a5e0b4', '#6cc58a', '#34a85a', '#1a7f37', '#0f5323'];
   var state = { layer: 'R31', round: null, base: 'osm', selected: null };
 
-  function itemOf(id) { return AG_ITEMS.filter(function (i) { return i.id === id; })[0]; }
+  var itemOf = U.item;
 
   Pages.map = {
     title: 'แผนที่ภาพรวม', sub: 'ยอดสะสมผลการจัดการเศษวัสดุทางการเกษตรรายอำเภอ', flush: true,
@@ -84,7 +84,7 @@
       function card(p, code) {
         var el = U.$('mCard'), d = p.perDistrict[code];
         if (!d) { el.hidden = true; return; }
-        var rows = ['R29', 'R30', 'R31', 'R32', 'R13', 'R20'].map(function (id) {
+        var rows = ['R29', 'R30', 'R31', 'R32', 'R13', 'R20'].filter(function (id) { var it = itemOf(id); return it && !it.retired; }).map(function (id) {
           var it = itemOf(id), x = d.items[id];
           return '<dt>' + U.esc(shortLabel(it)) + '</dt><dd>' + U.fmt(x.cum, '–') + ' <span class="muted small" style="font-weight:400">' + U.esc(x.unit || it.unit) + '</span></dd>';
         }).join('');
@@ -100,7 +100,7 @@
 
       function panel() {
         var showOthers = S.showOtherIndicators();
-        var others = AG_ITEMS.filter(function (i) { return i.type === 'num' && !LAYERS.some(function (l) { return l.id === i.id; }); });
+        var others = AG_ITEMS.filter(function (i) { return i.type === 'num' && !i.retired && !LAYERS.some(function (l) { return l.id === i.id; }); });
         if (!showOthers && !LAYERS.some(function (l) { return l.id === state.layer; })) state.layer = 'R31';
         U.$('mPanel').innerHTML =
           '<h3>ครั้งที่รายงาน</h3><select id="mRound" style="margin-bottom:10px">' + S.roundOptions(state.round) + '</select>' +

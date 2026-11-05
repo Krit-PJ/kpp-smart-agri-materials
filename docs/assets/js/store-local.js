@@ -70,6 +70,7 @@ var LocalStore = (function () {
         if (n) save();
         return n;
       },
+      replaceAll: function (name, rows) { load().tables[name] = clone(rows || []); save(); },
       remove: function (name, pred) {
         var a = t(name), b = a.filter(function (r) { return !pred(r); });
         load().tables[name] = b; save();

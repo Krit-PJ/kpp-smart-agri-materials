@@ -4,7 +4,7 @@
   var E = null; // สถานะหน้า
   var AGRI_CODE = '2.2';
 
-  function itemOf(id) { return AG_ITEMS.filter(function (i) { return i.id === id; })[0]; }
+  var itemOf = U.item;
   function draftKey() { return 'kpp-draft-' + (API.demo ? 'demo-' : '') + E.district + '-' + E.round; }
   function clone(o) { return JSON.parse(JSON.stringify(o)); }
 
@@ -98,7 +98,7 @@
     var comp = AGCore.computeDistrict(AG_ITEMS, S.records, E.district, E.round, { override: overrideRec() });
     var h = ['<div class="toolbar" style="margin-bottom:10px"><div class="seg" id="eFilter"><button data-f="all">ทั้งหมด</button><button data-f="agri">เฉพาะ 2.2 พื้นที่เกษตร</button><button data-f="filled">ที่กรอกแล้ว</button></div></div>',
       '<div class="form" id="eForm"><div class="fr head"><div>มาตรการ</div><div style="text-align:left">ผลการปฏิบัติงาน</div><div>รวม (ครั้งนี้)</div><div>หน่วยนับ</div><div>สะสมเดิม</div><div>สะสมรวม</div></div>'];
-    AG_ITEMS.forEach(function (it) {
+    AGCore.shownItems(AG_ITEMS).forEach(function (it) { // ไม่แสดงข้อที่ยกเลิกใช้ (ค่าเดิมยังเก็บไว้)
       var agri = it.code === AGRI_CODE ? ' agri' : '';
       if (it.type === 'header') {
         h.push('<div class="fr ' + (it.level === 0 ? 'sec' : 'grp') + agri + '" data-sec="' + it.section + '" data-code="' + it.code + '"><div class="lbl">' +
@@ -281,7 +281,7 @@
     var rows = [], warns = [];
     // ค่าเฉลี่ยรายสัปดาห์ของครั้งก่อน ๆ
     var hist = S.records.filter(function (r) { return r.district === E.district && r.round > 0 && r.round < E.round && AGCore.isCounted(r); });
-    AG_ITEMS.forEach(function (it) {
+    AGCore.shownItems(AG_ITEMS).forEach(function (it) {
       if (it.type === 'header') return;
       var c = E.F.values[it.id]; if (!c) return;
       var x = comp.items[it.id], v = AGCore.num(c.v);

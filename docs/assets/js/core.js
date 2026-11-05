@@ -238,11 +238,33 @@ var AGCore = (function () {
     return prev ? prev.sec4.map(function (a) { return { id: a.id, t: a.t, h: '', v: '', u: a.u }; }) : [];
   }
 
+  /** ผลลัพธ์ของข้อหนึ่ง (จาก computeDistrict/computeProvince) มีข้อมูลหรือไม่ */
+  function hasData(x) {
+    if (!x) return false;
+    if (x.cum !== null && x.cum !== undefined) return true;
+    if (x.everHas || x.yes > 0 || x.no > 0 || (x.texts && x.texts.length)) return true;
+    var w = x.week;
+    if (w && typeof w === 'object') return w.v !== null && w.v !== undefined || !!w.h;
+    return w !== null && w !== undefined;
+  }
+  /**
+   * ข้อคำถามที่แสดงในรายงาน: ข้อที่ "ยกเลิกใช้" (retired) แสดงเฉพาะเมื่อมีข้อมูลเดิม เพื่อไม่ให้ตัวเลขที่รายงานไปแล้วหายไป
+   * comp = ผลคำนวณ (ไม่ส่ง = ซ่อนข้อที่ยกเลิกใช้ทั้งหมด เช่น แบบฟอร์มกรอก)
+   */
+  function shownItems(items, comp) {
+    return items.filter(function (it) {
+      if (!it.retired) return true;
+      if (!comp || it.type === 'header') return false;
+      return hasData(comp.items[it.id]);
+    });
+  }
+
   return {
     COUNTED: COUNTED, STATUS_TH: STATUS_TH,
     isBlank: isBlank, num: num, hasOf: hasOf, isCounted: isCounted, norm: norm, recordOf: recordOf,
     computeDistrict: computeDistrict, computeProvince: computeProvince,
-    statusMatrix: statusMatrix, sanitizeInput: sanitizeInput, carrySec4: carrySec4
+    statusMatrix: statusMatrix, sanitizeInput: sanitizeInput, carrySec4: carrySec4,
+    hasData: hasData, shownItems: shownItems
   };
 })();
 

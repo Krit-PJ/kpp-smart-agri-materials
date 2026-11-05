@@ -39,6 +39,7 @@ var U = (function () {
     phone: '<path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.4 1.8.7 2.7a2 2 0 0 1-.5 2.1L8 9.8a16 16 0 0 0 6 6l1.3-1.3a2 2 0 0 1 2.1-.4c.9.3 1.8.6 2.7.7a2 2 0 0 1 1.7 2z"/>',
     key: '<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/>',
     layers: '<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5M2 12l10 5 10-5"/>',
+    up: '<path d="m6 15 6-6 6 6"/>', down: '<path d="m6 9 6 6 6-6"/>',
     refresh: '<path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.8-3.4L23 10M1 14l4.7 4.4A9 9 0 0 0 20.5 15"/>',
     calendar: '<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>',
     lock: '<rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
@@ -119,11 +120,13 @@ var U = (function () {
     var s = st || 'none';
     return '<span class="chip st-' + s + '"><i></i>' + esc(AGCore.STATUS_TH[s] || s) + '</span>' + (late ? ' <span class="chip st-late">ส่งช้า</span>' : '');
   }
+  /** ข้อคำถามตามรหัส (จากแบบฟอร์มที่ใช้อยู่) */
+  function item(id) { for (var i = 0; i < AG_ITEMS.length; i++) if (AG_ITEMS[i].id === id) return AG_ITEMS[i]; return null; }
   function pm(s) { return esc(s).replace(/PM2\.5/g, 'PM<sub>2.5</sub>'); }
   function initials(name) { var n = String(name || '?').replace(/^(นาย|นางสาว|นาง|น\.ส\.|ว่าที่ ร\.ต\.|ดร\.)\s*/, '').trim(); return n.charAt(0) || '?'; }
   function debounce(fn, ms) { var t; return function () { var a = arguments, s = this; clearTimeout(t); t = setTimeout(function () { fn.apply(s, a); }, ms); }; }
 
   return { icon: icon, $: $, esc: esc, fmt: fmt, thLong: thLong, thShort: thShort, thDateTime: thDateTime, today: today, addDays: addDays,
-    toast: toast, modal: modal, confirm: confirmBox, download: download, csv: csv, store: store, statusChip: statusChip, pm: pm,
+    toast: toast, modal: modal, confirm: confirmBox, download: download, csv: csv, store: store, statusChip: statusChip, pm: pm, item: item,
     initials: initials, debounce: debounce, TH_MONTHS: TH_MONTHS };
 })();
