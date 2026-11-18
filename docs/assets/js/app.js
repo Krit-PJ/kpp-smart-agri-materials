@@ -153,7 +153,16 @@ var App = (function () {
       body: '<div id="lgBody"></div>'
     });
     var body = m.body.querySelector('#lgBody');
-    function show(t, ph) {
+    /** เบอร์โทร → ตัวตนกลาง (SSO) ถ้าเปิดใช้; เชื่อมต่อไม่ได้ → วิธีเดิม (เว้นแต่ตั้ง required) */
+    function phoneLogin(phone) {
+      if (!SAM_SSO.on()) return API.call('auth.login', { phone: phone });
+      return SAM_SSO.login(phone).catch(function (err) {
+        if (SAM_SSO.fallback(err)) return API.call('auth.login', { phone: phone });
+        throw err;
+      });
+    }
+    function show(t, ph, pre) {
+      pre = pre || {};
       m.el.querySelectorAll('#lgTabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === (t === 'register' ? 'phone' : t)); });
       if (t === 'phone') {
         body.innerHTML = '<form id="lgForm" class="grid2" style="grid-template-columns:1fr">' +
@@ -164,9 +173,19 @@ var App = (function () {
           e.preventDefault();
           var btn = e.target.querySelector('button'), phone = U.$('lgPhone').value;
           btn.disabled = true;
-          API.call('auth.login', { phone: phone }).then(done).catch(function (err) {
+          phoneLogin(phone).then(function (r) {
+            if (r && r.status === 'need_register') {
+              btn.disabled = false;
+              if (!reg) { U.toast('หมายเลขนี้ยังไม่มีบัญชีในระบบนี้ และปิดรับลงทะเบียนชั่วคราว กรุณาติดต่อผู้ดูแลระดับจังหวัด', 'err'); return; }
+              U.toast('ยืนยันเบอร์แล้ว — กรอกข้อมูลสังกัดเพื่อเริ่มใช้ระบบนี้ (ครั้งเดียว)');
+              show('register', r.phone || phone, r);
+              return;
+            }
+            done(r);
+          }).catch(function (err) {
             btn.disabled = false;
             if (err.code === 'not_registered' && reg) { U.toast('หมายเลขนี้ยังไม่ได้ลงทะเบียน — กรอกข้อมูลเพื่อลงทะเบียน'); show('register', phone); }
+            else if (err.code === 'admin_account') { U.toast(err.message, 'err'); show('admin'); }
             else U.toast(err.message, 'err');
           });
         };
@@ -176,8 +195,8 @@ var App = (function () {
           '<div class="span2 notice info" style="margin:0">' + U.icon('info') + '<div>ลงทะเบียนครั้งเดียว ครั้งต่อไปเข้าสู่ระบบด้วยหมายเลขโทรศัพท์เท่านั้น</div></div>' +
           '<label class="fld span2"><span>หมายเลขโทรศัพท์ *</span><input id="rgPhone" inputmode="tel" value="' + U.esc(ph || '') + '" required placeholder="08x-xxx-xxxx"></label>' +
           '<label class="fld"><span>คำนำหน้า</span><select id="rgPrefix"><option>นาย</option><option>นาง</option><option>นางสาว</option><option value="">อื่น ๆ / ไม่ระบุ</option></select></label>' +
-          '<label class="fld"><span>ชื่อ - สกุล *</span><input id="rgName" required autocomplete="name"></label>' +
-          '<label class="fld span2"><span>ตำแหน่ง *</span><input id="rgPos" required list="posList" placeholder="เช่น นักวิชาการส่งเสริมการเกษตรปฏิบัติการ"><datalist id="posList"><option>เกษตรอำเภอ</option><option>นักวิชาการส่งเสริมการเกษตรชำนาญการ</option><option>นักวิชาการส่งเสริมการเกษตรปฏิบัติการ</option><option>เจ้าพนักงานการเกษตรชำนาญงาน</option><option>เจ้าพนักงานการเกษตรปฏิบัติงาน</option></datalist></label>' +
+          '<label class="fld"><span>ชื่อ - สกุล *</span><input id="rgName" required autocomplete="name" value="' + U.esc(pre.name || '') + '"></label>' +
+          '<label class="fld span2"><span>ตำแหน่ง *</span><input id="rgPos" required list="posList" value="' + U.esc(pre.position || '') + '" placeholder="เช่น นักวิชาการส่งเสริมการเกษตรปฏิบัติการ"><datalist id="posList"><option>เกษตรอำเภอ</option><option>นักวิชาการส่งเสริมการเกษตรชำนาญการ</option><option>นักวิชาการส่งเสริมการเกษตรปฏิบัติการ</option><option>เจ้าพนักงานการเกษตรชำนาญงาน</option><option>เจ้าพนักงานการเกษตรปฏิบัติงาน</option></datalist></label>' +
           '<label class="fld span2"><span>สังกัดสำนักงานเกษตรอำเภอ *</span><select id="rgDist" required><option value="">— เลือกอำเภอ —</option>' + S.districtOptions('') + '</select></label>' +
           '<label class="switch span2" style="align-items:flex-start"><input type="checkbox" id="rgOk" required style="margin-top:2px"><span class="small">ยินยอมให้ระบบเก็บชื่อ ตำแหน่ง และหมายเลขโทรศัพท์ เพื่อยืนยันตัวตนและบันทึกการเข้าใช้งานตามระเบียบราชการ</span></label>' +
           '<div class="span2 row" style="justify-content:space-between"><button type="button" class="btn ghost" id="rgBack">' + U.icon('arrowL') + 'กลับ</button><button class="btn primary" type="submit">' + U.icon('check') + 'ลงทะเบียนและเข้าใช้งาน</button></div></form>';
@@ -186,7 +205,7 @@ var App = (function () {
           e.preventDefault();
           var btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
           API.call('auth.register', { phone: U.$('rgPhone').value, prefix: U.$('rgPrefix').value, name: U.$('rgName').value, position: U.$('rgPos').value, district: U.$('rgDist').value })
-            .then(function (r) { U.toast('ลงทะเบียนสำเร็จ ยินดีต้อนรับ', 'ok'); done(r); })
+            .then(function (r) { U.toast('ลงทะเบียนสำเร็จ ยินดีต้อนรับ', 'ok'); SAM_SSO.attach(r.user.phone || U.$('rgPhone').value); done(r); })
             .catch(function (err) { btn.disabled = false; U.toast(err.message, 'err'); });
         };
       } else {
@@ -211,6 +230,7 @@ var App = (function () {
       U.toast('สวัสดี ' + r.user.name, 'ok');
       var h = parseHash();
       go(h.key && h.key !== 'map' ? h.key : (r.user.role === 'district' ? 'entry' : 'province'));
+      if (r.prevLogin) SAM_SSO.showPrev(r.prevLogin, function () { logout(false, true); });
     }
     show(tab || 'phone', phone);
   }
@@ -220,8 +240,11 @@ var App = (function () {
     U.store('kpp-session', JSON.stringify({ token: token, user: user, demo: API.demo }));
     renderNav();
   }
-  function logout(silent) {
+  /** silent = หมดอายุ/ถูกยกเลิก (ไม่ต้องแจ้งเซิร์ฟเวอร์) · keepPrev = คงแถบ "ระงับหมายเลขนี้แล้ว" ไว้ให้อ่าน */
+  function logout(silent, keepPrev) {
     if (S.token && !silent) API.call('auth.logout', { token: S.token }).catch(function () { });
+    // ออกจากระบบเอง = ออกจากตัวตนกลางในเครื่องนี้ด้วย (Agri-Risk / Green Gain Hub ในเบราว์เซอร์นี้ต้องเข้าใหม่)
+    if (!silent) { if (keepPrev) { if (window.KPP_ID) KPP_ID.logout(); } else SAM_SSO.logout(); }
     S.token = null; S.user = null; S.recordsLoaded = false; S.records = [];
     U.store('kpp-session', null);
     renderNav();
@@ -246,7 +269,7 @@ var App = (function () {
       bar.hidden = false;
       bar.querySelector('button').onclick = function () { bar.hidden = true; };
     }
-    var saved = null;
+    var saved = null, autoName = '';
     try { saved = JSON.parse(U.store('kpp-session') || 'null'); } catch (e) { saved = null; }
     if (saved && !!saved.demo !== API.demo) saved = null;
     refreshBoot().then(function () {
@@ -254,11 +277,16 @@ var App = (function () {
       S.token = saved.token;
       return API.call('auth.me', { token: saved.token }).then(function (r) { S.user = r.user; }).catch(function () { S.token = null; U.store('kpp-session', null); });
     }).then(function () {
+      // เครื่องนี้มีตัวตนกลางอยู่แล้ว (เข้าจาก Agri-Risk / Green Gain Hub) แต่ยังไม่ได้เข้าระบบนี้ → เข้าให้ก่อนแสดงหน้า (ไม่เด้งกล่องเข้าสู่ระบบ)
+      if (S.user) return null;
+      return SAM_SSO.auto().then(function (r) { if (r) { setSession(r.token, r.user); autoName = r.user.name; } });
+    }).then(function () {
       U.$('boot').hidden = true;
       U.$('shell').hidden = false;
       renderNav();
       window.addEventListener('hashchange', route);
       route();
+      if (autoName) U.toast('เข้าสู่ระบบด้วยตัวตนกลางแล้ว · สวัสดี ' + autoName, 'ok');
     }).catch(function (e) {
       U.$('boot').innerHTML = '<div class="notice err" style="max-width:520px">' + U.icon('alert') + '<div><b>เชื่อมต่อระบบไม่สำเร็จ</b><br>' + U.esc(e.message) +
         '<br><span class="small">ผู้ดูแล: ตรวจสอบ API_URL ใน assets/js/config.js และการ Deploy Apps Script (Who has access: Anyone)</span></div></div>';

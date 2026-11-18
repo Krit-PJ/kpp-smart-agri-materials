@@ -161,6 +161,26 @@ SheetStore_.prototype.lock = function (fn) {
   l.waitLock(25000);
   try { this.tables = {}; return fn(); } finally { l.releaseLock(); }
 };
+/**
+ * ระบบตัวตนกลาง (SSO) — Agri-Risk Map เป็นผู้ยืนยัน "เจ้าของเบอร์นี้" ให้ทั้ง 3 ระบบ (ARM, GGH, SAM)
+ * เรียกฝั่งเซิร์ฟเวอร์เท่านั้น (id_redeem / id_register) ไม่มีรหัสลับร่วมระหว่างระบบ
+ * Script Properties (ไม่บังคับ): SSO_IDP_URL = URL /exec ของ Agri-Risk (ค่าเริ่มต้นด้านล่าง)
+ * เปิด/ปิด: ชีต Settings คีย์ SSO_MODE = optional | required | off (Super Admin ตั้งในหน้า "ตั้งค่าระบบ")
+ */
+var SSO_IDP_DEFAULT = 'https://script.google.com/macros/s/AKfycbzAgSOxgQsaOx9bqBYM53KXFzk1QKsop46HZeINgtUzLXkaZTYYaZH3RZu0l-HDlN8TKA/exec';
+SheetStore_.prototype.idp = function (action, body) {
+  var url = PropertiesService.getScriptProperties().getProperty('SSO_IDP_URL') || SSO_IDP_DEFAULT;
+  var res = UrlFetchApp.fetch(url, { method: 'post', contentType: 'text/plain;charset=utf-8', muteHttpExceptions: true, followRedirects: true,
+    payload: JSON.stringify(Object.assign({ action: action }, body || {})) });
+  try { return JSON.parse(res.getContentText()); } catch (e) { return null; }
+};
+/** รันครั้งเดียวในหน้าแก้ไขสคริปต์ (เลือกฟังก์ชันนี้ → เรียกใช้) เพื่ออนุญาตให้สคริปต์เชื่อมต่อระบบตัวตนกลาง แล้วจึง Deploy เวอร์ชันใหม่ */
+function ssoCheck() {
+  var r = new SheetStore_().idp('ping', {});
+  Logger.log('ตัวตนกลาง: ' + JSON.stringify(r).slice(0, 200));
+  return r;
+}
+
 function hex_(bytes) { return bytes.map(function (b) { return ('0' + (b & 255).toString(16)).slice(-2); }).join(''); }
 function secret_() {
   var p = PropertiesService.getScriptProperties(), s = p.getProperty('TOKEN_SECRET');
