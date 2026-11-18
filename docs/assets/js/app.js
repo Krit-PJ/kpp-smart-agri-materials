@@ -163,6 +163,7 @@ var App = (function () {
     }
     function show(t, ph, pre) {
       pre = pre || {};
+      if (t !== 'admin') SAM_SSO.warm();
       m.el.querySelectorAll('#lgTabs button').forEach(function (b) { b.classList.toggle('on', b.dataset.t === (t === 'register' ? 'phone' : t)); });
       if (t === 'phone') {
         body.innerHTML = '<form id="lgForm" class="grid2" style="grid-template-columns:1fr">' +

@@ -17,10 +17,10 @@ var SAM_SSO = (function () {
     return c === 'sso_off' || c === 'sso_unreachable' || /ไม่รู้จักคำสั่ง|ปิดใช้งาน|เชื่อมต่อระบบตัวตนกลาง|Failed to fetch|NetworkError|Load failed/i.test(m);
   }
   function identity(phone) {
-    return KPP_ID.login(phone, { system: AUD }).catch(function (err) {
+    return KPP_ID.login(phone, { system: AUD, aud: AUD }).catch(function (err) {
       if (err.code !== 'not_found') throw err;
       return API.call('auth.ssoProvision', { phone: phone }).then(function (p) {
-        if (p && (p.status === 'provisioned' || p.status === 'exists')) return KPP_ID.login(phone, { system: AUD });
+        if (p && (p.status === 'provisioned' || p.status === 'exists')) return KPP_ID.login(phone, { system: AUD, aud: AUD });
         var e = new Error('หมายเลขนี้ยังไม่ได้ลงทะเบียน'); e.code = 'not_registered'; throw e;
       });
     });
@@ -30,7 +30,8 @@ var SAM_SSO = (function () {
     var prev = null;
     return identity(phone).then(function (id) {
       prev = id && id.prevLogin;
-      return KPP_ID.ticket(AUD);
+      // ตั๋วมากับคำตอบเข้าสู่ระบบ (ลดการเรียก Agri-Risk 1 รอบ) — kpp-id.js รุ่นเก่าไม่มี ticketFrom ก็ขอใหม่
+      return KPP_ID.ticketFrom ? KPP_ID.ticketFrom(id, AUD) : KPP_ID.ticket(AUD);
     }).then(function (t) { return API.call('auth.sso', { ticket: t.ticket }); })
       .then(function (r) { r.prevLogin = prev; return r; });
   }
@@ -38,7 +39,7 @@ var SAM_SSO = (function () {
   function attach(phone) {
     if (!on()) return Promise.resolve(null);
     return API.call('auth.ssoProvision', { phone: phone })
-      .then(function () { return KPP_ID.login(phone, { system: AUD }); })
+      .then(function () { return KPP_ID.login(phone, { system: AUD, aud: AUD }); })
       .catch(function () { return null; });
   }
   /** เข้าระบบเงียบ ๆ เมื่อเครื่องนี้มีตัวตนกลางอยู่แล้ว (เข้าจาก Agri-Risk / Green Gain Hub มาก่อน) — ครั้งเดียวต่อแท็บต่อการเข้าสู่ระบบ */
@@ -60,7 +61,14 @@ var SAM_SSO = (function () {
     box.innerHTML = KPP_ID.prevHtml(prev);
     KPP_ID.bindPrev(box, function (suspended) { if (suspended) { if (onSuspended) onSuspended(); setTimeout(function () { box.remove(); }, 8000); } else box.remove(); });
   }
+  /** ปลุก Apps Script ของ Agri-Risk และของระบบนี้ระหว่างผู้ใช้กรอกเบอร์ (ลดเวลารอเครื่องเย็น) */
+  var warmed = 0;
+  function warm() {
+    if (!on() || Date.now() - warmed < 300000) return; warmed = Date.now();
+    try { if (KPP_ID.warm) KPP_ID.warm(); } catch (e) { }
+    try { if (window.KPP_CONFIG && KPP_CONFIG.API_URL) fetch(KPP_CONFIG.API_URL, { cache: 'no-store' }).catch(function () { }); } catch (e) { }
+  }
   function clearPrev() { var b = document.getElementById('ssoPrev'); if (b) b.remove(); }
   function logout() { clearPrev(); if (window.KPP_ID) KPP_ID.logout(); }
-  return { on: on, mode: mode, fallback: fallback, login: login, attach: attach, auto: auto, showPrev: showPrev, clearPrev: clearPrev, logout: logout };
+  return { warm: warm, on: on, mode: mode, fallback: fallback, login: login, attach: attach, auto: auto, showPrev: showPrev, clearPrev: clearPrev, logout: logout };
 })();
