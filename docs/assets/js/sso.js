@@ -14,7 +14,7 @@ var SAM_SSO = (function () {
   function fallback(err) {
     var m = String(err && err.message || ''), c = err && err.code;
     if (mode() === 'required') return false;
-    return c === 'sso_off' || c === 'sso_unreachable' || /ปิดใช้งาน|เชื่อมต่อระบบตัวตนกลาง|Failed to fetch|NetworkError|Load failed/i.test(m);
+    return c === 'sso_off' || c === 'sso_unreachable' || /ไม่รู้จักคำสั่ง|ปิดใช้งาน|เชื่อมต่อระบบตัวตนกลาง|Failed to fetch|NetworkError|Load failed/i.test(m);
   }
   function identity(phone) {
     return KPP_ID.login(phone, { system: AUD }).catch(function (err) {
