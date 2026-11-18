@@ -177,6 +177,14 @@ input[type=checkbox], input[type=radio] { width: 18px; height: 18px; min-height:
 .notice.ok { background: var(--primary-bg); border-color: #aceebb; color: #0f5323; }
 .notice.warn { background: var(--accent-bg); border-color: #eac54f; color: #6c4400; }
 .notice.err { background: var(--danger-bg); border-color: #ffcecb; color: #82071e; }
+/* แถบ "เข้าใช้ครั้งก่อน" จากตัวตนกลาง (kpp-id.js) */
+.sso-prev { padding: 14px 28px 0; }
+@media (max-width: 860px) { .sso-prev { padding: 12px 16px 0; } }
+.sso-prev .kppid-prev, .sso-prev > b { display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center; background: var(--secondary-bg); border: 1px solid #b6e3ff; color: #0a3069; border-radius: var(--r-md); padding: 10px 14px; font-size: 14px; }
+.sso-prev .kppid-note { flex-basis: 100%; font-size: 13px; color: var(--muted); }
+.sso-prev .kppid-actions { display: flex; gap: 8px; }
+.sso-prev .kppid-ghost { font: inherit; font-size: 13px; padding: 5px 12px; min-height: 30px; border-radius: var(--r-sm); border: 1px solid var(--border); background: var(--surface); cursor: pointer; }
+.sso-prev .kppid-danger { color: var(--danger); border-color: #ffcecb; }
 .muted { color: var(--muted); }
 .small { font-size: 13px; }
 .empty { padding: 34px 16px; text-align: center; color: var(--muted); }

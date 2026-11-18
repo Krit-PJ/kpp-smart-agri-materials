@@ -7,6 +7,7 @@
  *   remove(table, pred) → n      now() 'yyyy-MM-dd HH:mm:ss'  today() 'yyyy-MM-dd'
  *   sha256(str) → hex            hmac(str) → hex              uuid() → string
  *   cacheGet(k) / cachePut(k, v, sec)                         lock(fn) → fn()
+ *   idp(action, body) → obj   (ไม่บังคับ) เรียกระบบตัวตนกลาง Agri-Risk Map ฝั่งเซิร์ฟเวอร์ — ไม่มี = ใช้ SSO ไม่ได้ (เช่น โหมดทดลอง)
  *
  * บทบาท (role):  district = เจ้าหน้าที่ระดับอำเภอ (Admin)
  *                mini     = ผู้รวบรวมข้อมูลระดับจังหวัด (Mini Super Admin)
@@ -49,11 +50,13 @@ var AGServer = (function () {
     ['SESSION_HOURS', '12', 'อายุการเข้าสู่ระบบ (ชั่วโมง)'],
     ['SHOW_OTHER_INDICATORS', 'FALSE', 'แสดงส่วน "ตัวชี้วัดอื่น" (นอกเหนือข้อ 2.2 พื้นที่เกษตร) ในแผนที่และกราฟเปรียบเทียบ'],
     ['API_ENABLED', 'TRUE', 'เปิด Data API ให้เว็บไซต์ Dashboard ภายนอกดึงข้อมูลสรุป'],
-    ['API_REQUIRE_KEY', 'TRUE', 'Data API ต้องใช้ API Key (Super Admin สร้าง/ยกเลิกได้)']
+    ['API_REQUIRE_KEY', 'TRUE', 'Data API ต้องใช้ API Key (Super Admin สร้าง/ยกเลิกได้)'],
+    ['SSO_MODE', 'optional', 'เข้าสู่ระบบด้วยตัวตนกลาง (เบอร์เดียวใช้ได้ทั้ง Agri-Risk Map, Green Gain Hub, Smart Agri): optional = ใช้ตัวตนกลาง สำรองด้วยวิธีเดิม · required = ตัวตนกลางเท่านั้น · off = ปิด']
   ];
   var PUBLIC_KEYS = ['SITE_NAME', 'PROVINCE', 'OFFICE', 'TITLE', 'SEASON', 'DOC_REF_1', 'DOC_REF_2', 'QR_NOTE', 'QR_LINK', 'QR_IMAGE',
     'PROV_REPORTER_NAME', 'PROV_REPORTER_TITLE', 'REGISTRATION_OPEN', 'PUBLIC_DASHBOARD', 'STATUS_VISIBLE_TO_DISTRICT',
-    'SHOW_OTHER_INDICATORS', 'API_ENABLED', 'API_REQUIRE_KEY'];
+    'SHOW_OTHER_INDICATORS', 'API_ENABLED', 'API_REQUIRE_KEY', 'SSO_MODE'];
+  var SSO_AUD = 'SAM', SSO_PROVINCE = '62';
   var MINI_KEYS = ['OFFICE', 'TITLE', 'SEASON', 'DOC_REF_1', 'DOC_REF_2', 'QR_NOTE', 'QR_LINK', 'QR_IMAGE',
     'PROV_REPORTER_NAME', 'PROV_REPORTER_TITLE', 'STATUS_VISIBLE_TO_DISTRICT', 'SHOW_OTHER_INDICATORS'];
   var SUPER_KEYS = PUBLIC_KEYS.concat(['SESSION_HOURS']);
@@ -312,6 +315,7 @@ var AGServer = (function () {
         if (str(u.status) === 'suspended') { audit(u, 'login_failed', 'บัญชีถูกระงับ', p._ua); fail('บัญชีถูกระงับการใช้งาน'); }
         return loginOk(u, p._ua, 'ชื่อผู้ใช้');
       }
+      if (ssoMode() === 'required' && store.idp) fail('กรุณาเข้าสู่ระบบด้วยเบอร์โทรผ่านตัวตนกลาง (โหลดหน้าเว็บใหม่แล้วลองอีกครั้ง)', 'sso_required');
       var phone = normPhone(p.phone);
       if (!validPhone(phone)) fail('หมายเลขโทรศัพท์ไม่ถูกต้อง');
       throttle('p:' + phone);
@@ -323,6 +327,55 @@ var AGServer = (function () {
       }
       if (str(u.status) === 'suspended') { audit(u, 'login_failed', 'บัญชีถูกระงับ', p._ua); fail('บัญชีถูกระงับการใช้งาน กรุณาติดต่อจังหวัด'); }
       return loginOk(u, p._ua, 'เบอร์โทร');
+    };
+
+    /* ── ตัวตนกลาง (SSO) ร่วมกับ Agri-Risk Map และ Green Gain Hub ──
+       เบราว์เซอร์ขอ "ตั๋วใช้ครั้งเดียว" (อายุ 2 นาที ออกให้ระบบนี้เท่านั้น) จาก Agri-Risk แล้วส่งมาที่นี่
+       เซิร์ฟเวอร์นี้แลกตั๋วกับ Agri-Risk เอง (id_redeem) — ไม่มีรหัสลับร่วมระหว่างระบบ
+       สิทธิ์ยังอยู่ที่ชีต Users ของระบบนี้เหมือนเดิม; Mini/Super ใช้ชื่อผู้ใช้ + รหัสผ่านเท่านั้น */
+    function ssoMode() { var m = str(settings().SSO_MODE || 'optional').toLowerCase(); return ['optional', 'required', 'off'].indexOf(m) >= 0 ? m : 'optional'; }
+    function idpCall(action, body) {
+      if (!store.idp) fail('โหมดนี้ไม่รองรับการเข้าสู่ระบบด้วยตัวตนกลาง', 'sso_off');
+      var r;
+      try { r = store.idp(action, body); } catch (e) { fail('เชื่อมต่อระบบตัวตนกลางไม่สำเร็จ กรุณาลองใหม่', 'sso_unreachable'); }
+      if (!r) fail('เชื่อมต่อระบบตัวตนกลางไม่สำเร็จ กรุณาลองใหม่', 'sso_unreachable');
+      return r;
+    }
+    A['auth.sso'] = function (p) {
+      if (ssoMode() === 'off') fail('ระบบตัวตนกลางปิดใช้งานชั่วคราว กรุณาเข้าสู่ระบบด้วยวิธีเดิม', 'sso_off');
+      var ticket = str(p.ticket);
+      if (!/^[A-Za-z0-9_\-=]+\.[A-Za-z0-9_\-=]+$/.test(ticket) || ticket.length > 2000) fail('ตั๋วเข้าสู่ระบบไม่ถูกต้อง', 'auth');
+      var r = idpCall('id_redeem', { ticket: ticket, aud: SSO_AUD });
+      if (!r.ok || !r.person) { audit(null, 'login_failed', 'ตัวตนกลาง: ' + clip(r.error || 'ยืนยันไม่สำเร็จ', 120), p._ua); fail(str(r.error || 'ยืนยันตัวตนไม่สำเร็จ'), 'auth'); }
+      var phone = normPhone(r.person.phone);
+      if (!validPhone(phone)) fail('เบอร์โทรของตัวตนกลางไม่ถูกต้อง', 'auth');
+      var u = users().filter(function (x) { return normPhone(x.phone) === phone; })[0];
+      if (!u) return { status: 'need_register', phone: phone, name: clip(r.person.fullName, 120), position: clip(r.person.position, 120) };
+      if (u.role !== 'district') {
+        audit(u, 'login_failed', 'บัญชีผู้ดูแลต้องใช้ชื่อผู้ใช้/รหัสผ่าน (ตัวตนกลาง)', p._ua);
+        fail('บัญชีนี้เป็นผู้ดูแลระดับจังหวัด กรุณาเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน', 'admin_account');
+      }
+      if (str(u.status) === 'suspended') { audit(u, 'login_failed', 'บัญชีถูกระงับ (ตัวตนกลาง)', p._ua); fail('บัญชีถูกระงับการใช้งาน กรุณาติดต่อจังหวัด'); }
+      return loginOk(u, p._ua, 'ตัวตนกลาง (SSO)');
+    };
+    /** ผู้ใช้เดิมของระบบนี้ (เจ้าหน้าที่อำเภอ) ยังไม่มีตัวตนกลาง → สร้างจากข้อมูลในระบบนี้ ไม่ต้องลงทะเบียนซ้ำ
+        ส่งไป Agri-Risk เฉพาะเบอร์ที่มีอยู่แล้วในชีต Users และเป็นบัญชีอำเภอที่ใช้งานอยู่ */
+    A['auth.ssoProvision'] = function (p) {
+      if (ssoMode() === 'off' || !store.idp) return { status: 'off' };
+      var phone = normPhone(p.phone);
+      if (!validPhone(phone)) fail('หมายเลขโทรศัพท์ไม่ถูกต้อง');
+      throttle('sp:' + phone);
+      var u = users().filter(function (x) { return normPhone(x.phone) === phone && x.role === 'district' && str(x.status) !== 'suspended'; })[0];
+      if (!u) return { status: 'none' };
+      store.cachePut('fail:sp:' + phone, String(Number(store.cacheGet('fail:sp:' + phone) || 0) + 1), 900);
+      var d = districtName(str(u.district));
+      // ความยินยอม: เจ้าหน้าที่ยินยอมให้เก็บชื่อ ตำแหน่ง เบอร์ เพื่อยืนยันตัวตนตอนลงทะเบียนในระบบนี้แล้ว
+      var r = idpCall('id_register', { phone: phone, fullName: clip((str(u.prefix) + str(u.name)).trim(), 120), position: clip(u.position, 120),
+        affiliation: d ? 'สำนักงานเกษตรอำเภอ' + d : '', provinceCode: SSO_PROVINCE, districtName: d, consent: true, system: SSO_AUD,
+        device: 'Smart Agri (ย้ายบัญชีเดิม)' });
+      if (r.ok) { audit(u, 'sso_provision', 'สร้างตัวตนกลางจากบัญชีเดิม', p._ua); return { status: 'provisioned' }; }
+      if (/ลงทะเบียนแล้ว/.test(str(r.error))) return { status: 'exists' };
+      fail(str(r.error || 'สร้างตัวตนกลางไม่สำเร็จ'));
     };
 
     A['auth.me'] = function (p, u) { return { user: publicUser(u) }; };
@@ -546,6 +599,7 @@ var AGServer = (function () {
         if (keys.indexOf(k) < 0) fail('ไม่มีสิทธิ์แก้ไขค่า ' + k, 'forbidden');
         var v = str(p.values[k]);
         if (k === 'QR_IMAGE' && v && !/^data:image\/(png|jpeg|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=]+$/.test(v)) fail('รูป QR Code ไม่ถูกต้อง');
+        if (k === 'SSO_MODE' && ['optional', 'required', 'off'].indexOf(v) < 0) fail('ค่า SSO_MODE ต้องเป็น optional, required หรือ off');
         if (v.length > 45000) fail('ข้อมูล ' + k + ' ยาวเกินไป (รูปควรมีขนาดไม่เกิน 30 KB)');
         setSetting(k, v); changed.push(k);
       });
@@ -898,7 +952,7 @@ var AGServer = (function () {
       return true;
     };
 
-    var OPEN = { 'public.bootstrap': 1, 'public.summary': 1, 'auth.register': 1, 'auth.login': 1 };
+    var OPEN = { 'public.bootstrap': 1, 'public.summary': 1, 'auth.register': 1, 'auth.login': 1, 'auth.sso': 1, 'auth.ssoProvision': 1 };
 
     function handle(action, payload) {
       payload = payload || {};

@@ -121,7 +121,7 @@
 
   /* ═════════ บันทึกการเข้าใช้งาน ═════════ */
   var ACT = {
-    login: ['เข้าสู่ระบบ', 'auth'], logout: ['ออกจากระบบ', 'auth'], login_failed: ['เข้าสู่ระบบไม่สำเร็จ', 'auth'], register: ['ลงทะเบียน', 'auth'],
+    login: ['เข้าสู่ระบบ', 'auth'], logout: ['ออกจากระบบ', 'auth'], login_failed: ['เข้าสู่ระบบไม่สำเร็จ', 'auth'], register: ['ลงทะเบียน', 'auth'], sso_provision: ['สร้างตัวตนกลาง (SSO)', 'auth'],
     save_draft: ['บันทึกร่าง', 'data'], submit: ['ส่งรายงาน', 'data'], withdraw: ['ถอนรายงาน', 'data'],
     review_accept: ['ตรวจรับรายงาน', 'review'], review_return: ['ส่งกลับแก้ไข', 'review'],
     print: ['พิมพ์รายงาน', 'data'], export_xlsx: ['ดาวน์โหลด Excel', 'data'], export_csv: ['ดาวน์โหลด CSV', 'data'], view_status: ['ดูสถานะ', 'data'],
@@ -217,7 +217,11 @@
       '<label class="switch"><input type="checkbox" data-set="SHOW_OTHER_INDICATORS"' + (val.SHOW_OTHER_INDICATORS === 'TRUE' ? ' checked' : '') + '> แสดงส่วน "ตัวชี้วัดอื่น" (นอกเหนือข้อ 2.2 พื้นที่เกษตร) ในแผนที่และกราฟเปรียบเทียบ <span class="small muted">(ค่าเริ่มต้น: ปิด · แบบกรอกและแบบพิมพ์แสดงครบทุกข้อเสมอ)</span></label>' +
       (sup ? '<label class="switch"><input type="checkbox" data-set="REGISTRATION_OPEN"' + (val.REGISTRATION_OPEN === 'TRUE' ? ' checked' : '') + '> เปิดให้เจ้าหน้าที่อำเภอลงทะเบียนเอง (เข้าใช้งานได้ทันที)</label>' +
         '<label class="switch"><input type="checkbox" data-set="PUBLIC_DASHBOARD"' + (val.PUBLIC_DASHBOARD === 'TRUE' ? ' checked' : '') + '> แสดงแผนที่สรุปผลต่อสาธารณะ (เฉพาะยอดรวมของรายงานที่ส่งแล้ว ไม่มีข้อมูลส่วนบุคคล)</label>' +
-        '<label class="fld" style="max-width:280px"><span>อายุการเข้าสู่ระบบ (ชั่วโมง)</span><input type="number" min="1" max="720" data-set="SESSION_HOURS" value="' + U.esc(val.SESSION_HOURS) + '"></label>' : '') + '</div></div>');
+        '<label class="fld" style="max-width:280px"><span>อายุการเข้าสู่ระบบ (ชั่วโมง)</span><input type="number" min="1" max="720" data-set="SESSION_HOURS" value="' + U.esc(val.SESSION_HOURS) + '"></label>' +
+        '<label class="fld" style="max-width:520px"><span>เข้าสู่ระบบด้วยตัวตนกลาง (เบอร์เดียวใช้ได้ทั้ง Agri-Risk Map, Green Gain Hub, Smart Agri)</span><select data-set="SSO_MODE">' +
+        [['optional', 'เปิด — ใช้ตัวตนกลาง ถ้าเชื่อมต่อไม่ได้ใช้วิธีเดิม (แนะนำ)'], ['required', 'บังคับ — ตัวตนกลางเท่านั้น'], ['off', 'ปิด — ใช้เบอร์โทรของระบบนี้อย่างเดียว']]
+          .map(function (o) { return '<option value="' + o[0] + '"' + ((val.SSO_MODE || 'optional') === o[0] ? ' selected' : '') + '>' + o[1] + '</option>'; }).join('') +
+        '</select><small class="muted">มีผลกับเจ้าหน้าที่อำเภอเท่านั้น · Mini Super Admin และ Super Admin ใช้ชื่อผู้ใช้ + รหัสผ่านเหมือนเดิม</small></label>' : '') + '</div></div>');
     if (sup) h.push('<div class="card" id="apiCard"><div class="card-h"><h2>Data API สำหรับ Dashboard ภายนอก</h2><a class="btn sm" href="api.html" target="_blank" rel="noopener">' + U.icon('file') + 'เอกสาร API</a><button class="btn sm primary" id="apiSave">' + U.icon('save') + 'บันทึก</button>' +
       '<p>ให้เว็บไซต์อื่นดึงยอดสรุป (เฉพาะรายงานที่ส่งแล้ว/ตรวจรับแล้ว ไม่มีข้อมูลส่วนบุคคล) ผ่าน GET · JSON / CSV / JSONP · cache 5 นาที</p></div><div class="card-b" style="display:grid;gap:12px">' +
       '<label class="switch"><input type="checkbox" data-set="API_ENABLED"' + (val.API_ENABLED === 'TRUE' ? ' checked' : '') + '> เปิดใช้งาน Data API</label>' +
