@@ -22,7 +22,7 @@ function idp(action, body) {
     t.used = true;
     const p = people[t.phone];
     if (!p || p.status !== 'active') return { ok: false, error: 'บัญชีถูกระงับหรือไม่พบตัวตน' };
-    return { ok: true, person: { personId: 'P' + t.phone, phone: t.phone, fullName: p.fullName, position: p.position } };
+    return { ok: true, person: { personId: 'P' + t.phone, phone: t.phone, fullName: p.fullName, position: p.position, scope: p.scope || 'all' } };
   }
   if (action === 'id_register') {
     if (body.consent !== true) return { ok: false, error: 'กรุณายอมรับเงื่อนไข' };
@@ -46,11 +46,14 @@ const errCode = (a, p, code) => { try { call(a, p); assert.fail('ควรล้
 const sup = call('auth.login', { username: 'krit', password: 'secret99' }).token;
 call('admin.users.create', { token: sup, role: 'mini', username: 'mini1', password: 'abcdef12', name: 'มินิ', phone: '0855555555' });
 
-// ค่าเริ่มต้น optional และแสดงในข้อมูลสาธารณะ
-ok(call('public.bootstrap').settings.SSO_MODE === 'optional', 'SSO_MODE ค่าเริ่มต้น');
+// 21 พ.ย. 2569: ค่าเริ่มต้น required และแสดงในข้อมูลสาธารณะ (ส่วนที่ 1–6 ทดสอบแบบ optional เหมือนเดิม)
+ok(call('public.bootstrap').settings.SSO_MODE === 'required', 'SSO_MODE ค่าเริ่มต้น required');
+call('admin.settings.save', { token: sup, values: { SSO_MODE: 'optional' } });
 
-// ผู้ใช้เดิม (ลงทะเบียนด้วยวิธีเดิม) → สร้างตัวตนกลางจากข้อมูลเดิม
+// ผู้ใช้เดิม (ลงทะเบียนก่อนมีตัวตนกลาง ใช้งานอยู่) → สร้างตัวตนกลางจากข้อมูลเดิม
+const idpFn = store.idp; store.idp = null;
 call('auth.register', { phone: '0812345678', prefix: 'นาย', name: 'สมชาย ใจดี', position: 'นวก.', district: 'D03' });
+store.idp = idpFn;
 ok(call('auth.ssoProvision', { phone: '0812345678' }).status === 'provisioned', 'provision ผู้ใช้เดิม');
 const reg = calls.filter(c => c[0] === 'id_register').pop()[1];
 ok(reg.consent === true && reg.system === 'SAM' && reg.provinceCode === '62' && reg.fullName === 'นายสมชาย ใจดี' && /อำเภอ/.test(reg.affiliation), 'ข้อมูลที่ส่งไปตัวตนกลาง');
@@ -126,6 +129,34 @@ st2.update('Settings', r => r.key === 'SSO_MODE', { value: 'required' });
 S2.handle('auth.register', { phone: '0812222222', name: 'ทดลอง ระบบ', position: 'x', district: 'D01' });
 ok(S2.handle('auth.login', { phone: '0812222222' }).token, 'โหมดทดลองไม่ถูกบังคับ SSO');
 try { S2.handle('auth.sso', { ticket: 'a.b' }); assert.fail(); } catch (e) { ok(e.code === 'sso_off', e.message); }
+
+/* ── 21 พ.ย. 2569: ลงทะเบียนต้องยืนยันเบอร์ผ่านตัวตนกลาง · เกษตรกร/ผู้รับซื้อ (GGH) ใช้ได้เฉพาะ Green Gain Hub · รออนุมัติ ── */
+call('admin.settings.save', { token: sup, values: { SSO_MODE: 'required' } });
+const reg2 = { phone: '0877777777', prefix: 'นาง', name: 'มานี ใหม่ใจ', position: 'นวก.', district: 'D02' };
+errCode('auth.register', reg2, 'sso_required');   // ไม่มีตั๋ว = ลงทะเบียนเบอร์คนอื่นไม่ได้
+people['0811111111'] = { status: 'active', fullName: 'ชาวนา ขยัน', scope: 'market' };
+errCode('auth.sso', { ticket: ticket('0811111111') }, 'market_user');
+errCode('auth.register', Object.assign({}, reg2, { phone: '0811111111', ticket: ticket('0811111111') }), 'market_user');
+ok(!store.rows('Users').some(u => u.phone === '0811111111'), 'ไม่มีบัญชีเกษตรกรในระบบนี้');
+people['0877777777'] = { status: 'active', fullName: 'มานี ใหม่ใจ', scope: 'all' };
+people['0800000000'] = { status: 'active', fullName: 'คนอื่น', scope: 'all' };
+err('auth.register', Object.assign({}, reg2, { ticket: ticket('0800000000') }), /ไม่ตรงกับตัวตน/);
+const pr = call('auth.register', Object.assign({}, reg2, { ticket: ticket('0877777777') }));
+ok(pr.status === 'pending' && !pr.token && /รอผู้ดูแล/.test(pr.message), 'ลงทะเบียน → รออนุมัติ');
+const pu = store.rows('Users').find(u => u.phone === '0877777777');
+ok(pu.status === 'pending', 'สถานะ pending');
+errCode('auth.sso', { ticket: ticket('0877777777') }, 'pending');
+ok(call('admin.logs', { token: sup }).some(l => l.action === 'register' && /รออนุมัติ/.test(l.detail) && /ตัวตนกลาง/.test(l.detail)), 'log ลงทะเบียนรออนุมัติ');
+const miniT = call('auth.login', { username: 'mini1', password: 'abcdef12' }).token;
+call('admin.users.update', { token: miniT, id: pu.id, status: 'active' });   // Mini อนุมัติได้
+ok(call('admin.logs', { token: sup }).some(l => /อนุมัติการลงทะเบียน/.test(l.detail)), 'log อนุมัติ');
+ok(call('auth.sso', { ticket: ticket('0877777777') }).token, 'อนุมัติแล้วเข้าได้');
+// สิทธิ์เจ้าหน้าที่มาก่อน: มีบัญชีอยู่แล้ว แม้ตัวตนกลางมาจาก Green Gain Hub ก็ยังเข้าได้
+people['0812345678'].scope = 'market';
+ok(call('auth.sso', { ticket: ticket('0812345678') }).token, 'บัญชีเจ้าหน้าที่เดิมชนะ scope market');
+const appJs = fs.readFileSync(path.join(__dirname, '../docs/assets/js/app.js'), 'utf8');
+ok(appJs.includes('SAM_SSO.registerTicket(d)') && appJs.includes("r.status === 'pending'"), 'หน้าเว็บ: ลงทะเบียนส่งตั๋ว + แสดงรออนุมัติ');
+ok(fs.readFileSync(path.join(__dirname, '../docs/assets/js/page-admin.js'), 'utf8').includes('data-approve'), 'หน้าผู้ใช้: ปุ่มอนุมัติ');
 
 /* ── Code.gs: SheetStore_.idp เรียก Agri-Risk ผ่าน UrlFetchApp ── */
 const fetched = [];

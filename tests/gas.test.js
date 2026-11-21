@@ -42,8 +42,15 @@ let r = JSON.parse(ctx.doGet({ parameter: { action: 'public.bootstrap' } }).t);
 assert(r.ok, r.error); assert.strictEqual(r.data.districts.length, 11); assert.strictEqual(r.data.rounds.length, 27);
 assert.strictEqual(r.data.rounds[1].start, '2026-10-22'); assert.strictEqual(r.data.rounds[1].open, true);
 const su = post({ action: 'auth.login', username: 'krit', password: 'pw123456' }); assert(su.ok, su.error);
+// 21 พ.ย. 2569: ระบบจริงค่าเริ่มต้น SSO required — ทดสอบเส้นทางเบอร์โทรแบบเดิม (off) · ลงทะเบียนแล้วรออนุมัติ
+assert.strictEqual(r.data.settings.SSO_MODE, 'required', 'ค่าเริ่มต้น required');
+const offs = post({ action: 'admin.settings.save', token: su.data.token, values: { SSO_MODE: 'off' } }); assert(offs.ok, offs.error);
 const reg = post({ action: 'auth.register', phone: '0812345678', name: 'สมชาย ใจดี', position: 'นวก.', district: 'D03' }); assert(reg.ok, reg.error);
+assert.strictEqual(reg.data.status, 'pending', 'ลงทะเบียน → รออนุมัติ');
 assert.strictEqual(ss.sheets.Users.d[2][5], '0812345678', 'เบอร์โทรคง 0 นำหน้า');
+assert(!post({ action: 'auth.login', phone: '0812345678' }).ok, 'รออนุมัติ: ยังเข้าไม่ได้');
+const ulist = post({ action: 'admin.users.list', token: su.data.token }); assert(ulist.ok, ulist.error);
+const ap = post({ action: 'admin.users.update', token: su.data.token, id: ulist.data.find(x => x.phone === '0812345678').id, status: 'active' }); assert(ap.ok, ap.error);
 const lg = post({ action: 'auth.login', phone: '0812345678' }); assert(lg.ok, lg.error);
 let s = post({ action: 'data.save', token: lg.data.token, round: 1, district: 'D03', mode: 'submit', values: { R31: { v: 120.5 }, R32: { t: 'อัดฟาง', v: 40, u: 'ไร่' } }, sec4: [{ id: 'a1', t: 'กิจกรรม', v: 1, u: 'แห่ง' }], sec5: 'ไม่มี' });
 assert(s.ok, s.error);

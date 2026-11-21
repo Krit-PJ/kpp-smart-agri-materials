@@ -35,6 +35,17 @@ var SAM_SSO = (function () {
     }).then(function (t) { return API.call('auth.sso', { ticket: t.ticket }); })
       .then(function (r) { r.prevLogin = prev; return r; });
   }
+  /** 21 พ.ย. 2569: ตั๋วสำหรับลงทะเบียน — เข้าตัวตนกลางด้วยเบอร์นี้ หรือสร้างใหม่ (ตำแหน่งตามที่กรอก) แล้วขอตั๋วใช้ครั้งเดียว
+      ระบบยืนยันว่าเป็นเจ้าของเบอร์จริง และไม่รับเกษตรกร/ผู้รับซื้อของ Green Gain Hub */
+  function registerTicket(d) {
+    if (!on()) return Promise.resolve(null);
+    return KPP_ID.login(d.phone, { system: AUD, aud: AUD }).catch(function (err) {
+      if (err.code !== 'not_found') throw err;
+      return KPP_ID.register({ phone: d.phone, fullName: ((d.prefix || '') + d.name).trim(), position: d.position, affiliation: d.affiliation || '',
+        provinceCode: '62', districtName: d.districtName || '', consent: true }, { system: AUD, aud: AUD });
+    }).then(function (id) { return KPP_ID.ticketFrom ? KPP_ID.ticketFrom(id, AUD) : KPP_ID.ticket(AUD); })
+      .then(function (t) { return t.ticket; });
+  }
   /** หลังลงทะเบียนในระบบนี้: ให้มีตัวตนกลางด้วย (ไม่ขัดการใช้งานถ้าไม่สำเร็จ) */
   function attach(phone) {
     if (!on()) return Promise.resolve(null);
@@ -70,5 +81,5 @@ var SAM_SSO = (function () {
   }
   function clearPrev() { var b = document.getElementById('ssoPrev'); if (b) b.remove(); }
   function logout() { clearPrev(); if (window.KPP_ID) KPP_ID.logout(); }
-  return { warm: warm, on: on, mode: mode, fallback: fallback, login: login, attach: attach, auto: auto, showPrev: showPrev, clearPrev: clearPrev, logout: logout };
+  return { warm: warm, on: on, mode: mode, fallback: fallback, login: login, attach: attach, registerTicket: registerTicket, auto: auto, showPrev: showPrev, clearPrev: clearPrev, logout: logout };
 })();
