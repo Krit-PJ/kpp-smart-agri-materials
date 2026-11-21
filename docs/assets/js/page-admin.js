@@ -14,24 +14,26 @@
     var sup = S.user.role === 'super', list = UF.list;
     App.setHeader('ผู้ใช้งาน', sup ? 'จัดการบัญชีทุกระดับ · เพิ่ม/ลบ Mini Super Admin' : 'บัญชีเจ้าหน้าที่ระดับอำเภอ');
     if (sup) App.actions('<button class="btn primary" id="uAdd">' + U.icon('plus') + 'เพิ่มผู้ใช้</button>').querySelector('#uAdd').onclick = function () { editUser(null); };
-    var c = { district: 0, mini: 0, super: 0, suspended: 0 };
-    list.forEach(function (u) { c[u.role]++; if (u.status === 'suspended') c.suspended++; });
+    var c = { district: 0, mini: 0, super: 0, suspended: 0, pending: 0 };
+    list.forEach(function (u) { c[u.role]++; if (u.status === 'suspended') c.suspended++; if (u.status === 'pending') c.pending++; });
     var rows = list.filter(function (u) {
       var q = UF.q.toLowerCase();
       return (!UF.role || u.role === UF.role) && (!UF.d || u.district === UF.d) && (!UF.st || u.status === UF.st) &&
         (!q || (u.name + ' ' + u.phone + ' ' + u.username + ' ' + u.position + ' ' + u.districtName).toLowerCase().indexOf(q) >= 0);
-    }).sort(function (a, b) { return (a.role === b.role ? 0 : a.role === 'super' ? -1 : b.role === 'super' ? 1 : a.role === 'mini' ? -1 : b.role === 'mini' ? 1 : 0) || String(a.district).localeCompare(b.district) || a.name.localeCompare(b.name, 'th'); });
-    var covered = {}; list.forEach(function (u) { if (u.role === 'district' && u.status !== 'suspended') covered[u.district] = (covered[u.district] || 0) + 1; });
+    }).sort(function (a, b) { return ((b.status === 'pending') - (a.status === 'pending')) || (a.role === b.role ? 0 : a.role === 'super' ? -1 : b.role === 'super' ? 1 : a.role === 'mini' ? -1 : b.role === 'mini' ? 1 : 0) || String(a.district).localeCompare(b.district) || a.name.localeCompare(b.name, 'th'); });
+    var covered = {}; list.forEach(function (u) { if (u.role === 'district' && u.status === 'active') covered[u.district] = (covered[u.district] || 0) + 1; });
     var noUser = S.districts.filter(function (d) { return !covered[d.code]; });
     var h = ['<div class="kpis">',
       tile('users', '', 'เจ้าหน้าที่อำเภอ', c.district + '<small>บัญชี</small>', noUser.length ? '<div class="small" style="color:var(--danger)">ยังไม่มีบัญชี: ' + noUser.map(function (d) { return d.name; }).join(', ') + '</div>' : '<div class="small muted">ครบทั้ง ' + S.districts.length + ' อำเภอ</div>'),
       sup ? tile('shield', 'b', 'Mini Super Admin', c.mini + '<small>บัญชี</small>') : '',
       sup ? tile('key', 'y', 'Super Admin', c.super + '<small>บัญชี</small>') : '',
       tile('lock', 'r', 'ระงับการใช้งาน', c.suspended + '<small>บัญชี</small>'), '</div>',
+      // 21 พ.ย. 2569: เจ้าหน้าที่ลงทะเบียนเองต้องรออนุมัติ
+      c.pending ? '<div class="notice warn" style="margin-bottom:12px">' + U.icon('info') + '<div><b>มีคำขอลงทะเบียนรออนุมัติ ' + c.pending + ' รายการ</b> — ตรวจชื่อ ตำแหน่ง เบอร์ และอำเภอว่าเป็นเจ้าหน้าที่จริงก่อนกด “อนุมัติ” (เกษตรกรและผู้รับซื้อลงทะเบียนในระบบนี้ไม่ได้)</div></div>' : '',
       '<div class="toolbar"><label class="fld" style="flex:1"><span>ค้นหา</span><input id="uQ" value="' + U.esc(UF.q) + '" placeholder="ชื่อ เบอร์โทร ตำแหน่ง"></label>',
       sup ? '<label class="fld"><span>บทบาท</span><select id="uRole"><option value="">ทั้งหมด</option><option value="district">อำเภอ</option><option value="mini">Mini Super Admin</option><option value="super">Super Admin</option></select></label>' : '',
       '<label class="fld"><span>อำเภอ</span><select id="uD">' + S.districtOptions(UF.d, true) + '</select></label>',
-      '<label class="fld"><span>สถานะ</span><select id="uSt"><option value="">ทั้งหมด</option><option value="active">ใช้งาน</option><option value="suspended">ระงับ</option></select></label></div>',
+      '<label class="fld"><span>สถานะ</span><select id="uSt"><option value="">ทั้งหมด</option><option value="pending">รออนุมัติ</option><option value="active">ใช้งาน</option><option value="suspended">ระงับ</option></select></label></div>',
       '<div class="card"><div class="tbl-wrap"><table class="t"><thead><tr><th>ชื่อ - ตำแหน่ง</th><th>บทบาท</th><th>บัญชีเข้าระบบ</th><th>สังกัด</th><th>เข้าใช้ล่าสุด</th><th class="n">ครั้ง</th><th>สถานะ</th><th></th></tr></thead><tbody>'];
     if (!rows.length) h.push('<tr><td colspan="8" class="empty">ไม่พบผู้ใช้</td></tr>');
     rows.forEach(function (u) {
@@ -41,8 +43,8 @@
         '<td>' + (u.role === 'district' ? 'อ.' + U.esc(u.districtName) : '<span class="muted">จังหวัด</span>') + '</td>' +
         '<td class="small">' + (u.last_login ? U.thDateTime(u.last_login) : '<span class="muted">ยังไม่เคย</span>') + (u.last_seen && u.last_seen !== u.last_login ? '<div class="muted">ใช้งานล่าสุด ' + U.thDateTime(u.last_seen) + '</div>' : '') + '</td>' +
         '<td class="n">' + (u.login_count || 0) + '</td>' +
-        '<td>' + (u.status === 'suspended' ? '<span class="chip st-returned"><i></i>ระงับ</span>' : '<span class="chip st-submitted"><i></i>ใช้งาน</span>') + '</td>' +
-        '<td style="white-space:nowrap">' + (canMng && !self ? (sup ? '<button class="btn sm" data-edit="' + u.id + '">' + U.icon('edit') + 'แก้ไข</button> ' : '') +
+        '<td>' + (u.status === 'pending' ? '<span class="chip st-draft"><i></i>รออนุมัติ</span>' : u.status === 'suspended' ? '<span class="chip st-returned"><i></i>ระงับ</span>' : '<span class="chip st-submitted"><i></i>ใช้งาน</span>') + '</td>' +
+        '<td style="white-space:nowrap">' + (u.status === 'pending' && canMng ? '<button class="btn sm primary" data-approve="' + u.id + '">' + U.icon('check') + 'อนุมัติ</button> <button class="btn sm" data-reject="' + u.id + '">ไม่อนุมัติ</button>' : canMng && !self ? (sup ? '<button class="btn sm" data-edit="' + u.id + '">' + U.icon('edit') + 'แก้ไข</button> ' : '') +
           '<button class="btn sm" data-st="' + u.id + '">' + (u.status === 'suspended' ? 'เปิดใช้งาน' : 'ระงับ') + '</button> ' +
           '<button class="btn sm ghost" data-revoke="' + u.id + '" title="ให้ออกจากระบบทุกอุปกรณ์">' + U.icon('logout') + '</button>' +
           (sup ? '<button class="btn sm ghost danger" data-del="' + u.id + '" title="ลบ">' + U.icon('trash') + '</button>' : '') : '') + '</td></tr>');
@@ -62,6 +64,20 @@
         var u = byId(b.dataset.st), to = u.status === 'suspended' ? 'active' : 'suspended';
         U.confirm(to === 'suspended' ? 'ระงับการใช้งาน' : 'เปิดใช้งาน', (to === 'suspended' ? 'ระงับบัญชีของ <b>' : 'เปิดใช้งานบัญชีของ <b>') + U.esc(u.name) + '</b>' + (to === 'suspended' ? ' ผู้ใช้จะถูกออกจากระบบทันที' : ''), to === 'suspended' ? 'ระงับ' : 'เปิดใช้งาน', to === 'suspended' ? 'danger solid' : 'primary')
           .then(function (ok) { if (ok) S.call('admin.users.update', { id: u.id, status: to }).then(function () { return reload(to === 'suspended' ? 'ระงับบัญชีแล้ว' : 'เปิดใช้งานแล้ว'); }).catch(function (e) { U.toast(e.message, 'err'); }); });
+      };
+    });
+    view.querySelectorAll('[data-approve]').forEach(function (b) {
+      b.onclick = function () {
+        var u = byId(b.dataset.approve);
+        U.confirm('อนุมัติการลงทะเบียน', 'อนุมัติ <b>' + U.esc((u.prefix || '') + u.name) + '</b> ' + U.esc(u.position) + ' อ.' + U.esc(u.districtName) + ' เบอร์ ' + U.esc(u.phone) + ' ให้เข้าใช้งานได้', 'อนุมัติ', 'primary')
+          .then(function (ok) { if (ok) S.call('admin.users.update', { id: u.id, status: 'active' }).then(function () { return reload('อนุมัติแล้ว'); }).catch(function (e) { U.toast(e.message, 'err'); }); });
+      };
+    });
+    view.querySelectorAll('[data-reject]').forEach(function (b) {
+      b.onclick = function () {
+        var u = byId(b.dataset.reject);
+        U.confirm('ไม่อนุมัติ', 'ไม่อนุมัติ <b>' + U.esc(u.name) + '</b> (บัญชีจะเป็นสถานะ “ระงับ” เปิดใช้งานภายหลังได้)', 'ไม่อนุมัติ', 'danger solid')
+          .then(function (ok) { if (ok) S.call('admin.users.update', { id: u.id, status: 'suspended' }).then(function () { return reload('ไม่อนุมัติแล้ว'); }).catch(function (e) { U.toast(e.message, 'err'); }); });
       };
     });
     view.querySelectorAll('[data-revoke]').forEach(function (b) {

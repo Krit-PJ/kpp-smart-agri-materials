@@ -169,7 +169,7 @@ var App = (function () {
         body.innerHTML = '<form id="lgForm" class="grid2" style="grid-template-columns:1fr">' +
           '<label class="fld"><span>หมายเลขโทรศัพท์ที่ลงทะเบียนไว้</span><input id="lgPhone" inputmode="tel" autocomplete="tel" placeholder="08x-xxx-xxxx" value="' + U.esc(ph || '') + '" required></label>' +
           '<button class="btn primary" type="submit" style="justify-content:center">' + U.icon('login') + 'เข้าสู่ระบบ</button>' +
-          (reg ? '<p class="small muted" style="margin:0;text-align:center">ยังไม่มีบัญชี? <a href="#" id="toReg">ลงทะเบียนเจ้าหน้าที่อำเภอ</a> (ใช้งานได้ทันที)</p>' : '<p class="small muted" style="margin:0">ปิดรับลงทะเบียนชั่วคราว ติดต่อผู้ดูแลระดับจังหวัด</p>') + '</form>';
+          (reg ? '<p class="small muted" style="margin:0;text-align:center">ยังไม่มีบัญชี? <a href="#" id="toReg">ลงทะเบียนเจ้าหน้าที่อำเภอ</a>' + (API.demo ? ' (ใช้งานได้ทันที)' : ' (รอจังหวัดอนุมัติ)') + '</p>' : '<p class="small muted" style="margin:0">ปิดรับลงทะเบียนชั่วคราว ติดต่อผู้ดูแลระดับจังหวัด</p>') + '</form>';
         body.querySelector('#lgForm').onsubmit = function (e) {
           e.preventDefault();
           var btn = e.target.querySelector('button'), phone = U.$('lgPhone').value;
@@ -193,21 +193,28 @@ var App = (function () {
         var tr = body.querySelector('#toReg'); if (tr) tr.onclick = function (e) { e.preventDefault(); show('register', U.$('lgPhone').value); };
       } else if (t === 'register') {
         body.innerHTML = '<form id="rgForm" class="grid2">' +
-          '<div class="span2 notice info" style="margin:0">' + U.icon('info') + '<div>ลงทะเบียนครั้งเดียว ครั้งต่อไปเข้าสู่ระบบด้วยหมายเลขโทรศัพท์เท่านั้น</div></div>' +
+          '<div class="span2 notice info" style="margin:0">' + U.icon('info') + '<div>ลงทะเบียนครั้งเดียว ครั้งต่อไปเข้าสู่ระบบด้วยหมายเลขโทรศัพท์เท่านั้น' + (API.demo ? '' : ' · ผู้ดูแลระดับจังหวัดอนุมัติก่อนเข้าใช้งาน · เกษตรกรและผู้รับซื้อใช้ Green Gain Hub') + '</div></div>' +
           '<label class="fld span2"><span>หมายเลขโทรศัพท์ *</span><input id="rgPhone" inputmode="tel" value="' + U.esc(ph || '') + '" required placeholder="08x-xxx-xxxx"></label>' +
           '<label class="fld"><span>คำนำหน้า</span><select id="rgPrefix"><option>นาย</option><option>นาง</option><option>นางสาว</option><option value="">อื่น ๆ / ไม่ระบุ</option></select></label>' +
           '<label class="fld"><span>ชื่อ - สกุล *</span><input id="rgName" required autocomplete="name" value="' + U.esc(pre.name || '') + '"></label>' +
           '<label class="fld span2"><span>ตำแหน่ง *</span><input id="rgPos" required list="posList" value="' + U.esc(pre.position || '') + '" placeholder="เช่น นักวิชาการส่งเสริมการเกษตรปฏิบัติการ"><datalist id="posList"><option>เกษตรอำเภอ</option><option>นักวิชาการส่งเสริมการเกษตรชำนาญการ</option><option>นักวิชาการส่งเสริมการเกษตรปฏิบัติการ</option><option>เจ้าพนักงานการเกษตรชำนาญงาน</option><option>เจ้าพนักงานการเกษตรปฏิบัติงาน</option></datalist></label>' +
           '<label class="fld span2"><span>สังกัดสำนักงานเกษตรอำเภอ *</span><select id="rgDist" required><option value="">— เลือกอำเภอ —</option>' + S.districtOptions('') + '</select></label>' +
           '<label class="switch span2" style="align-items:flex-start"><input type="checkbox" id="rgOk" required style="margin-top:2px"><span class="small">ยินยอมให้ระบบเก็บชื่อ ตำแหน่ง และหมายเลขโทรศัพท์ เพื่อยืนยันตัวตนและบันทึกการเข้าใช้งานตามระเบียบราชการ</span></label>' +
-          '<div class="span2 row" style="justify-content:space-between"><button type="button" class="btn ghost" id="rgBack">' + U.icon('arrowL') + 'กลับ</button><button class="btn primary" type="submit">' + U.icon('check') + 'ลงทะเบียนและเข้าใช้งาน</button></div></form>';
+          '<div class="span2 row" style="justify-content:space-between"><button type="button" class="btn ghost" id="rgBack">' + U.icon('arrowL') + 'กลับ</button><button class="btn primary" type="submit">' + U.icon('check') + (API.demo ? 'ลงทะเบียนและเข้าใช้งาน' : 'ส่งคำขอลงทะเบียน') + '</button></div></form>';
         body.querySelector('#rgBack').onclick = function () { show('phone', U.$('rgPhone').value); };
         body.querySelector('#rgForm').onsubmit = function (e) {
           e.preventDefault();
           var btn = e.target.querySelector('button[type=submit]'); btn.disabled = true;
-          API.call('auth.register', { phone: U.$('rgPhone').value, prefix: U.$('rgPrefix').value, name: U.$('rgName').value, position: U.$('rgPos').value, district: U.$('rgDist').value })
-            .then(function (r) { U.toast('ลงทะเบียนสำเร็จ ยินดีต้อนรับ', 'ok'); SAM_SSO.attach(r.user.phone || U.$('rgPhone').value); done(r); })
-            .catch(function (err) { btn.disabled = false; U.toast(err.message, 'err'); });
+          var d = { phone: U.$('rgPhone').value, prefix: U.$('rgPrefix').value, name: U.$('rgName').value, position: U.$('rgPos').value, district: U.$('rgDist').value };
+          var dn = (S.districts || []).filter(function (x) { return x.code === d.district; })[0];
+          d.districtName = dn ? dn.name : ''; d.affiliation = dn ? 'สำนักงานเกษตรอำเภอ' + dn.name : '';
+          // 21 พ.ย. 2569: ยืนยันเบอร์ผ่านตัวตนกลางก่อน (ตั๋วใช้ครั้งเดียว) แล้วรอจังหวัดอนุมัติ
+          SAM_SSO.registerTicket(d).then(function (ticket) {
+            return API.call('auth.register', { phone: d.phone, prefix: d.prefix, name: d.name, position: d.position, district: d.district, ticket: ticket || '' });
+          }).then(function (r) {
+            if (r && r.status === 'pending') { btn.disabled = false; U.toast(r.message, 'ok'); show('phone', d.phone); return; }
+            U.toast('ลงทะเบียนสำเร็จ ยินดีต้อนรับ', 'ok'); SAM_SSO.attach(r.user.phone || d.phone); done(r);
+          }).catch(function (err) { btn.disabled = false; U.toast(err.message, 'err'); });
         };
       } else {
         body.innerHTML = '<form id="adForm" class="grid2" style="grid-template-columns:1fr">' +

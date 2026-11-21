@@ -51,7 +51,7 @@ var AGServer = (function () {
     ['SHOW_OTHER_INDICATORS', 'FALSE', 'แสดงส่วน "ตัวชี้วัดอื่น" (นอกเหนือข้อ 2.2 พื้นที่เกษตร) ในแผนที่และกราฟเปรียบเทียบ'],
     ['API_ENABLED', 'TRUE', 'เปิด Data API ให้เว็บไซต์ Dashboard ภายนอกดึงข้อมูลสรุป'],
     ['API_REQUIRE_KEY', 'TRUE', 'Data API ต้องใช้ API Key (Super Admin สร้าง/ยกเลิกได้)'],
-    ['SSO_MODE', 'optional', 'เข้าสู่ระบบด้วยตัวตนกลาง (เบอร์เดียวใช้ได้ทั้ง Agri-Risk Map, Green Gain Hub, Smart Agri): optional = ใช้ตัวตนกลาง สำรองด้วยวิธีเดิม · required = ตัวตนกลางเท่านั้น · off = ปิด']
+    ['SSO_MODE', 'required', 'เข้าสู่ระบบด้วยตัวตนกลาง (เจ้าหน้าที่ใช้เบอร์เดียวกับ Agri-Risk Map / ABM; เกษตรกรและผู้รับซื้อใช้ได้เฉพาะ Green Gain Hub): required = ตัวตนกลางเท่านั้น · optional = ใช้ตัวตนกลาง สำรองด้วยวิธีเดิม · off = ปิด']
   ];
   var PUBLIC_KEYS = ['SITE_NAME', 'PROVINCE', 'OFFICE', 'TITLE', 'SEASON', 'DOC_REF_1', 'DOC_REF_2', 'QR_NOTE', 'QR_LINK', 'QR_IMAGE',
     'PROV_REPORTER_NAME', 'PROV_REPORTER_TITLE', 'REGISTRATION_OPEN', 'PUBLIC_DASHBOARD', 'STATUS_VISIBLE_TO_DISTRICT',
@@ -230,6 +230,7 @@ var AGServer = (function () {
       var u = users().filter(function (x) { return str(x.id) === p[0]; })[0];
       if (!u) fail('ไม่พบบัญชีผู้ใช้', 'auth');
       if (str(u.status) === 'suspended') fail('บัญชีถูกระงับการใช้งาน กรุณาติดต่อผู้ดูแลระบบ', 'auth');
+      if (str(u.status) === 'pending') fail(PENDING_MSG, 'auth');
       if ((Number(u.token_ver) || 0) !== Number(p[1])) fail('การเข้าสู่ระบบถูกยกเลิก กรุณาเข้าสู่ระบบใหม่', 'auth');
       var k = 'seen:' + u.id;
       if (!store.cacheGet(k)) { store.cachePut(k, '1', 300); store.update(T.USERS, function (x) { return str(x.id) === str(u.id); }, { last_seen: store.now() }); }
@@ -280,10 +281,28 @@ var AGServer = (function () {
       });
     };
 
+    /* 21 พ.ย. 2569: ลงทะเบียนเจ้าหน้าที่อำเภอ (ระบบจริง — มีตัวตนกลาง)
+       · ต้องยืนยันเบอร์ผ่านตัวตนกลาง (ตั๋วใช้ครั้งเดียว) — ลงทะเบียนเบอร์ของคนอื่นไม่ได้ (ยกเว้น SSO_MODE = off)
+       · เกษตรกร/ผู้รับซื้อ (ตัวตนกลาง scope "market" จาก Green Gain Hub) ลงทะเบียนเป็นเจ้าหน้าที่ไม่ได้ — ใช้ได้เฉพาะ Green Gain Hub
+       · บัญชีใหม่ "รออนุมัติ" (pending) จนกว่า Mini Super Admin / Super Admin อนุมัติ
+       โหมดทดลองในเบราว์เซอร์ (ไม่มี store.idp) ทำงานแบบเดิม */
+    var MARKET_MSG = 'หมายเลขนี้ลงทะเบียนเป็นเกษตรกรหรือผู้รับซื้อ ใช้ได้เฉพาะ Green Gain Hub (ระบบนี้สำหรับเจ้าหน้าที่)';
+    var PENDING_MSG = 'บัญชีนี้รอผู้ดูแลระดับจังหวัดอนุมัติ จึงจะเข้าใช้งานได้';
     A['auth.register'] = function (p) {
       var s = settings();
       if (!truthy(s.REGISTRATION_OPEN)) fail('ปิดรับลงทะเบียนชั่วคราว กรุณาติดต่อผู้ดูแลระบบ');
-      var phone = normPhone(p.phone);
+      var phone = normPhone(p.phone), person = null;
+      if (store.idp && ssoMode() !== 'off') {
+        var tk = str(p.ticket);
+        if (!/^[A-Za-z0-9_\-=]+\.[A-Za-z0-9_\-=]+$/.test(tk) || tk.length > 2000) fail('กรุณาลงทะเบียนผ่านตัวตนกลาง (โหลดหน้าเว็บใหม่แล้วลองอีกครั้ง)', 'sso_required');
+        var rr = idpCall('id_redeem', { ticket: tk, aud: SSO_AUD });
+        if (!rr.ok || !rr.person) fail(str(rr.error || 'ยืนยันตัวตนไม่สำเร็จ'), 'auth');
+        person = rr.person;
+        var vp = normPhone(person.phone);
+        if (phone && phone !== vp) fail('หมายเลขโทรศัพท์ไม่ตรงกับตัวตนที่ยืนยัน');
+        phone = vp;
+        if (person.scope === 'market') fail(MARKET_MSG, 'market_user');
+      }
       if (!validPhone(phone)) fail('หมายเลขโทรศัพท์ไม่ถูกต้อง (ตัวเลข 9–10 หลัก ขึ้นต้นด้วย 0)');
       var name = clip(p.name, 120), position = clip(p.position, 120), prefix = clip(p.prefix, 30);
       if (name.length < 3) fail('กรุณากรอกชื่อ-สกุล');
@@ -292,11 +311,13 @@ var AGServer = (function () {
       if (!d) fail('กรุณาเลือกอำเภอที่สังกัด');
       return store.lock(function () {
         if (users().some(function (u) { return normPhone(u.phone) === phone; })) fail('หมายเลขนี้ลงทะเบียนแล้ว กรุณาเข้าสู่ระบบ', 'exists');
+        var pending = !!store.idp;
         var u = { id: store.uuid(), role: 'district', username: '', pass_hash: '', salt: '', phone: phone, prefix: prefix, name: name,
-          position: position, district: d.code, status: 'active', token_ver: 0, created_at: store.now(), created_by: 'ลงทะเบียนเอง',
+          position: position, district: d.code, status: pending ? 'pending' : 'active', token_ver: 0, created_at: store.now(), created_by: 'ลงทะเบียนเอง',
           last_login: '', login_count: 0, last_seen: '' };
         store.insert(T.USERS, u);
-        audit(u, 'register', 'ลงทะเบียน อ.' + d.name, p._ua);
+        audit(u, 'register', 'ลงทะเบียน อ.' + d.name + (pending ? ' (รออนุมัติ' + (person ? ' · ยืนยันเบอร์ผ่านตัวตนกลาง' : '') + ')' : ''), p._ua);
+        if (pending) return { status: 'pending', phone: phone, message: 'ส่งคำขอลงทะเบียนแล้ว รอผู้ดูแลระดับจังหวัดอนุมัติ เมื่ออนุมัติแล้วเข้าสู่ระบบด้วยหมายเลขโทรศัพท์นี้' };
         return loginOk(u, p._ua, 'เบอร์โทร (หลังลงทะเบียน)');
       });
     };
@@ -313,6 +334,7 @@ var AGServer = (function () {
           fail('ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', 'auth');
         }
         if (str(u.status) === 'suspended') { audit(u, 'login_failed', 'บัญชีถูกระงับ', p._ua); fail('บัญชีถูกระงับการใช้งาน'); }
+        if (str(u.status) === 'pending') fail(PENDING_MSG, 'pending');
         return loginOk(u, p._ua, 'ชื่อผู้ใช้');
       }
       if (ssoMode() === 'required' && store.idp) fail('กรุณาเข้าสู่ระบบด้วยเบอร์โทรผ่านตัวตนกลาง (โหลดหน้าเว็บใหม่แล้วลองอีกครั้ง)', 'sso_required');
@@ -321,6 +343,7 @@ var AGServer = (function () {
       throttle('p:' + phone);
       u = users().filter(function (x) { return normPhone(x.phone) === phone; })[0];
       if (!u) { failed('p:' + phone); audit(null, 'login_failed', 'ยังไม่ได้ลงทะเบียน', p._ua, phone); fail('หมายเลขนี้ยังไม่ได้ลงทะเบียน', 'not_registered'); }
+      if (str(u.status) === 'pending') fail(PENDING_MSG, 'pending');
       if (u.role !== 'district') {
         audit(u, 'login_failed', 'บัญชีผู้ดูแลต้องใช้ชื่อผู้ใช้/รหัสผ่าน', p._ua);
         fail('บัญชีนี้เป็นผู้ดูแลระดับจังหวัด กรุณาเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน');
@@ -350,7 +373,12 @@ var AGServer = (function () {
       var phone = normPhone(r.person.phone);
       if (!validPhone(phone)) fail('เบอร์โทรของตัวตนกลางไม่ถูกต้อง', 'auth');
       var u = users().filter(function (x) { return normPhone(x.phone) === phone; })[0];
-      if (!u) return { status: 'need_register', phone: phone, name: clip(r.person.fullName, 120), position: clip(r.person.position, 120) };
+      if (!u) {
+        // เกษตรกร/ผู้รับซื้อ (Green Gain Hub) ใช้ได้เฉพาะ Green Gain Hub — ผู้ที่มีบัญชีเจ้าหน้าที่ในระบบนี้อยู่แล้วยังเข้าได้ตามปกติ
+        if (r.person.scope === 'market') { audit(null, 'login_failed', 'ตัวตนกลาง: เกษตรกร/ผู้รับซื้อ (ใช้ได้เฉพาะ Green Gain Hub)', p._ua, phone); fail(MARKET_MSG, 'market_user'); }
+        return { status: 'need_register', phone: phone, name: clip(r.person.fullName, 120), position: clip(r.person.position, 120) };
+      }
+      if (str(u.status) === 'pending') fail(PENDING_MSG, 'pending');
       if (u.role !== 'district') {
         audit(u, 'login_failed', 'บัญชีผู้ดูแลต้องใช้ชื่อผู้ใช้/รหัสผ่าน (ตัวตนกลาง)', p._ua);
         fail('บัญชีนี้เป็นผู้ดูแลระดับจังหวัด กรุณาเข้าสู่ระบบด้วยชื่อผู้ใช้และรหัสผ่าน', 'admin_account');
@@ -365,7 +393,7 @@ var AGServer = (function () {
       var phone = normPhone(p.phone);
       if (!validPhone(phone)) fail('หมายเลขโทรศัพท์ไม่ถูกต้อง');
       throttle('sp:' + phone);
-      var u = users().filter(function (x) { return normPhone(x.phone) === phone && x.role === 'district' && str(x.status) !== 'suspended'; })[0];
+      var u = users().filter(function (x) { return normPhone(x.phone) === phone && x.role === 'district' && ['suspended', 'pending'].indexOf(str(x.status)) < 0; })[0];
       if (!u) return { status: 'none' };
       store.cachePut('fail:sp:' + phone, String(Number(store.cacheGet('fail:sp:' + phone) || 0) + 1), 900);
       var d = districtName(str(u.district));
@@ -523,7 +551,8 @@ var AGServer = (function () {
         if (str(t.id) === str(u.id)) fail('ไม่สามารถระงับบัญชีของตนเองได้');
         patch.status = p.status === 'suspended' ? 'suspended' : 'active';
         if (patch.status === 'suspended') patch.token_ver = (Number(t.token_ver) || 0) + 1;
-        notes.push(patch.status === 'suspended' ? 'ระงับการใช้งาน' : 'เปิดใช้งาน');
+        if (str(t.status) === 'pending') notes.push(patch.status === 'suspended' ? 'ไม่อนุมัติการลงทะเบียน' : 'อนุมัติการลงทะเบียน');
+        else notes.push(patch.status === 'suspended' ? 'ระงับการใช้งาน' : 'เปิดใช้งาน');
       }
       if (p.revoke) { patch.token_ver = (Number(t.token_ver) || 0) + 1; notes.push('บังคับออกจากระบบ'); }
       if (u.role === 'super') {
